@@ -64,9 +64,11 @@ function EntradaTaxa({ ariaLabel, value, onChange }: EntradaTaxaProps) {
 export default function Juros({ dados, onChange, totalJuros, disabled = false }: JurosProps) {
   const taxaMensal360 = taxaMensalBase360(dados)
   const fatorMensal360 = 1 + taxaMensal360
-  const taxaAnual360 = (Math.pow(fatorMensal360, 12) - 1) * 100
-  const taxaAnualInformada = dados.periodicidadeTaxa === 'A' ? dados.taxaJuros : taxaAnual360
-  const taxaMensalInformada = dados.periodicidadeTaxa === 'M' ? dados.taxaJuros : taxaMensal360 * 100
+  const taxaAnualInformada = dados.periodicidadeTaxa === 'A' ? dados.taxaJuros : 0
+  const taxaMensalInformada = dados.periodicidadeTaxa === 'M' ? dados.taxaJuros : 0
+  const taxaAnual360 = dados.periodicidadeTaxa === 'A'
+    ? dados.taxaJuros
+    : (Math.pow(fatorMensal360, 12) - 1) * 100
   const taxaMensal252 = (Math.pow(fatorMensal360, 21 / 30) - 1) * 100
   const taxaAnual252 = (Math.pow(1 + taxaMensal252 / 100, 12) - 1) * 100
   const cetAnual365 = (Math.pow(fatorMensal360, 365 / 30) - 1) * 100
@@ -74,45 +76,60 @@ export default function Juros({ dados, onChange, totalJuros, disabled = false }:
   return (
     <fieldset className="panel interest-panel" disabled={disabled}>
       <legend>Taxa de Juros</legend>
-      <div className="interest-grid">
-        <section className="interest-base">
-          <h3 className="interest-group-title">Base 360</h3>
+      <section className="interest-input" aria-labelledby="taxas-entrada">
+        <h3 className="interest-group-title" id="taxas-entrada">Taxa informada — Base 360</h3>
+        <div className="interest-base-values">
+          <label className={`interest-value interest-value--input${dados.periodicidadeTaxa === 'M' ? ' interest-value--selected' : ''}`}>
+            <span>ao mês{dados.periodicidadeTaxa === 'M' ? ' (informada)' : ''}</span>
+            <EntradaTaxa
+              ariaLabel="Taxa de juros ao mês, base 360"
+              value={taxaMensalInformada}
+              onChange={(valor) => {
+                onChange('taxaJuros', valor)
+                onChange('periodicidadeTaxa', 'M')
+              }}
+            />
+          </label>
+          <label className={`interest-value interest-value--input${dados.periodicidadeTaxa === 'A' ? ' interest-value--selected' : ''}`}>
+            <span>ao ano{dados.periodicidadeTaxa === 'A' ? ' (informada)' : ''}</span>
+            <EntradaTaxa
+              ariaLabel="Taxa de juros ao ano, base 360"
+              value={taxaAnualInformada}
+              onChange={(valor) => {
+                onChange('taxaJuros', valor)
+                onChange('periodicidadeTaxa', 'A')
+              }}
+            />
+          </label>
+        </div>
+        <p className="interest-input-hint">Digite no campo desejado para trocar o critério; a outra taxa será zerada.</p>
+      </section>
+
+      <div className="interest-grid" role="group" aria-label="Taxas equivalentes">
+        <section className="interest-base" aria-labelledby="taxas-equivalentes-360">
+          <h3 className="interest-group-title" id="taxas-equivalentes-360">Base 360</h3>
           <div className="interest-base-values">
-            <label className="interest-value interest-value--input">
+            <label className="interest-value interest-value--output">
               <span>ao mês</span>
-              <EntradaTaxa
-                ariaLabel="Taxa de juros ao mês, base 360"
-                value={taxaMensalInformada}
-                onChange={(valor) => {
-                  onChange('taxaJuros', valor)
-                  onChange('periodicidadeTaxa', 'M')
-                }}
-              />
+              <output aria-label="Taxa equivalente ao mês, base 360">{percentual(taxaMensal360 * 100)}</output>
             </label>
-            <label className="interest-value interest-value--input">
+            <label className="interest-value interest-value--output">
               <span>ao ano</span>
-              <EntradaTaxa
-                ariaLabel="Taxa de juros ao ano, base 360"
-                value={taxaAnualInformada}
-                onChange={(valor) => {
-                  onChange('taxaJuros', valor)
-                  onChange('periodicidadeTaxa', 'A')
-                }}
-              />
+              <output aria-label="Taxa equivalente ao ano, base 360">{percentual(taxaAnual360)}</output>
             </label>
           </div>
         </section>
 
-        <section className="interest-base">
-          <h3 className="interest-group-title">Base 252</h3>
+        <section className="interest-base" aria-labelledby="taxas-equivalentes-252">
+          <h3 className="interest-group-title" id="taxas-equivalentes-252">Base 252</h3>
           <div className="interest-base-values">
             <label className="interest-value interest-value--output">
               <span>ao mês</span>
-              <output>{percentual(taxaMensal252)}</output>
+              <output aria-label="Taxa equivalente ao mês, base 252">{percentual(taxaMensal252)}</output>
             </label>
             <label className="interest-value interest-value--output">
               <span>ao ano</span>
-              <output>{percentual(taxaAnual252)}</output>
+              <output aria-label="Taxa equivalente ao ano, base 252">{percentual(taxaAnual252)}</output>
             </label>
           </div>
         </section>

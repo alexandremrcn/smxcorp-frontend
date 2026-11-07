@@ -1,5 +1,5 @@
 import type { Parcela } from '../model/simulacao'
-import { formatarMoeda, formatarNumero } from '../model/simulacao'
+import { formatarMoeda, formatarNumero, isPeriodicidadeVencimento, periodicidadesVencimento } from '../model/simulacao'
 import { dataBackendParaISO, numeroBackend, type ResultadoSimulacao } from '../services/backend'
 
 interface ResultadoProps {
@@ -12,14 +12,6 @@ const sistemasAmortizacao: Record<number, string> = {
   2: 'Price',
   3: 'SAC',
   4: 'Especial',
-}
-
-const periodicidades: Record<string, string> = {
-  M: 'Mensal',
-  B: 'Bimestral',
-  T: 'Trimestral',
-  A: 'Anual',
-  D: 'Diária',
 }
 
 function moedaOuTraco(valor?: string) {
@@ -69,7 +61,7 @@ export default function Resultado({ parcelas, simulacao }: ResultadoProps) {
           <div><dt>IOF adicional</dt><dd>{formatarTaxa('0.38')}</dd></div>
           <div><dt>IOF calculado</dt><dd>{moedaOuTraco(simulacao.vlIof)}</dd></div>
           <div><dt>Sistema de amortização</dt><dd>{sistemasAmortizacao[simulacao.sistemaAmortizacao] ?? simulacao.sistemaAmortizacao}</dd></div>
-          <div><dt>Periodicidade dos vencimentos</dt><dd>{periodicidades[simulacao.periodicidadeVcto] ?? simulacao.periodicidadeVcto}</dd></div>
+          <div><dt>Periodicidade dos vencimentos</dt><dd>{isPeriodicidadeVencimento(simulacao.periodicidadeVcto) ? periodicidadesVencimento[simulacao.periodicidadeVcto] : simulacao.periodicidadeVcto}</dd></div>
         </dl>
       )}
       <div className="result-scroll">

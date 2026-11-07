@@ -147,6 +147,60 @@ export async function calcularSimulacao(input: SolicitarSimulacao) {
   return resultado
 }
 
+export async function ajustarVencimentoParaDiaUtil(
+  dataReferencia: string,
+  vencimento: string,
+  signal: AbortSignal,
+) {
+  const resposta = await requisitar('/datas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      diaBaseVcto: String(Number(vencimento.slice(-2))),
+      idDiaUtil: 'S',
+      dtReferencia: dataISOParaBackend(dataReferencia),
+      dtVct1ap: dataISOParaBackend(vencimento),
+      qtdeDiasCarencia: '0',
+      periodicidadeVcto: 'D',
+      qtdeParcelas: '1',
+    }),
+    signal,
+  }, (valor): valor is { dtVct1ap: string } => (
+    isRecord(valor) && isString(valor.dtVct1ap) && /^\d{8}$/.test(valor.dtVct1ap)
+  ))
+  return dataBackendParaISO(resposta.dtVct1ap)
+}
+
+export async function calcularDatasVencimento(dados: {
+  dataSimulacao: string
+  primeiraDataVencimento: string
+  diaBaseVencimento: number
+  diasUteis: boolean
+  periodicidade: string
+  quantidadeParcelas: number
+  sistemaAmortizacao: string
+}, signal?: AbortSignal) {
+  const resposta = await requisitar('/datas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      diaBaseVcto: String(dados.diaBaseVencimento),
+      idDiaUtil: dados.diasUteis ? 'S' : 'N',
+      dtReferencia: dataISOParaBackend(dados.dataSimulacao),
+      ...(dados.sistemaAmortizacao === 'Price HP' ? {} : { dtVct1ap: dataISOParaBackend(dados.primeiraDataVencimento) }),
+      qtdeDiasCarencia: '0',
+      periodicidadeVcto: dados.periodicidade,
+      qtdeParcelas: String(dados.quantidadeParcelas),
+    }),
+    signal,
+  }, (valor): valor is { dtVencimento: string[] } => (
+    isRecord(valor) && isStringArray(valor.dtVencimento)
+    && valor.dtVencimento.length === dados.quantidadeParcelas
+    && valor.dtVencimento.every((data) => /^\d{8}$/.test(data))
+  ))
+  return resposta.dtVencimento.map(dataBackendParaISO)
+}
+
 export function dataBackendParaISO(data: string) {
   if (/^\d{8}$/.test(data)) {
     return `${data.slice(0, 4)}-${data.slice(4, 6)}-${data.slice(6, 8)}`

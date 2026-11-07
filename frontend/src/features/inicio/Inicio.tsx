@@ -91,13 +91,13 @@ export default function Inicio() {
         <div className="home-hero-visual">
           <div className="home-preview-heading">
             <span>PRÉVIA DO PRODUTO</span>
-            <span>SIMULADOR FINANCEIRO</span>
+            <span>PLATAFORMA DE MODELAGEM FINANCEIRA</span>
           </div>
           <div className="home-preview-window">
             <iframe
               className="home-preview-frame"
               src="/simulador"
-              title="Prévia do protótipo do simulador financeiro SMX Corp"
+              title="Prévia da Plataforma de Modelagem Financeira SMX Corp"
               loading="lazy"
               tabIndex={-1}
             />
@@ -194,7 +194,7 @@ export default function Inicio() {
 
       <footer className="home-footer">
         <a className="brand home-brand" href="/" aria-label="SMX Corp, página inicial"><span>SMX</span><span>Corp</span></a>
-        <span>Simulador financeiro · SMX Corp</span>
+        <span>Plataforma de Modelagem Financeira · SMX Corp</span>
         <button className="home-footer-login" type="button" onClick={() => abrirAcesso()}>Login</button>
       </footer>
 

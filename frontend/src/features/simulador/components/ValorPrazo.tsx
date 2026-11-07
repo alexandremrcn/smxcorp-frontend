@@ -1,4 +1,5 @@
 import Campo from './Campo'
+import { MAX_PARCELAS } from '../model/simulacao'
 import type { DadosSimulacao } from '../model/simulacao'
 
 interface ValorPrazoProps {
@@ -60,7 +61,7 @@ export default function ValorPrazo({ dados, valorIof, disabled = false, onChange
               checked={dados.modoValor === 'credito'}
               onChange={() => onChange('modoValor', 'credito')}
             />
-            <span>Valor solicitado</span>
+            <span>Valor liberado</span>
           </label>
           <label>
             <input
@@ -73,7 +74,7 @@ export default function ValorPrazo({ dados, valorIof, disabled = false, onChange
           </label>
         </div>
         <Campo
-          label="Valor solicitado (creditado em conta)"
+          label="Valor líquido liberado"
           htmlFor="valor-credito"
           kind={dados.modoValor === 'credito' ? 'input' : undefined}
         >
@@ -104,7 +105,7 @@ export default function ValorPrazo({ dados, valorIof, disabled = false, onChange
           />
         </Campo>
         <Campo label="Quantidade de parcelas" htmlFor="quantidade-parcelas" kind="input">
-          <input id="quantidade-parcelas" type="number" min="1" max="380" step="1" value={dados.quantidadeParcelas} onChange={(event) => onChange('quantidadeParcelas', Number(event.target.value))} />
+          <input id="quantidade-parcelas" type="number" min="1" max={MAX_PARCELAS} step="1" value={dados.quantidadeParcelas} disabled={dados.periodicidade === 'D'} title={dados.periodicidade === 'D' ? 'Vencimento único possui uma parcela.' : `Máximo de ${MAX_PARCELAS} parcelas.`} onChange={(event) => onChange('quantidadeParcelas', Number(event.target.value))} />
         </Campo>
         <Campo label="Valor do IOF" htmlFor="valor-iof" kind="output">
           <input

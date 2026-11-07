@@ -2,6 +2,7 @@
   color-scheme: light;
   --navy: #073879;
   --blue: #145fa7;
+  --date-past: #b42318;
   --line: #18395b;
   --ink: #1b2b3d;
   --muted: #647082;
@@ -41,6 +42,7 @@
   color-scheme: dark;
   --navy: #a8ccef;
   --blue: #74b5e5;
+  --date-past: #ff8a80;
   --line: #607f98;
   --ink: #e8eef1;
   --muted: #aebbc2;
@@ -159,89 +161,62 @@
   align-self: stretch;
 }
 
-.date-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  margin-bottom: -1px;
-  border: 1px solid var(--divider);
-  border-bottom: 0;
-  border-radius: 5px 5px 0 0;
-  overflow: hidden;
-}
-
-.date-tabs button {
-  height: 32px;
-  border: 0;
-  border-right: 1px solid var(--divider);
-  border-radius: 0;
-  background: var(--panel);
-  color: var(--neutral-text);
-  font-size: 12px;
-  cursor: pointer;
-  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
-}
-
-.date-tabs button:last-child {
-  border-right: 0;
-}
-
-.date-tabs button:hover {
-  background: var(--surface);
-  color: var(--navy);
-}
-
-.date-tabs button:focus-visible {
-  position: relative;
-  outline: 2px solid var(--blue);
-  outline-offset: -3px;
-}
-
-.date-tabs button.active {
-  background: var(--surface);
-  box-shadow: inset 0 3px 0 var(--blue);
-  color: var(--navy);
-  font-weight: 700;
-}
-
 .dates-fields {
-  min-height: 198px;
-  margin-top: 0;
-  gap: 8px;
-  padding: 12px;
   border: 1px solid var(--divider);
-  border-top: 0;
-  border-radius: 0 0 5px 5px;
-}
-
-.dates-fields-main,
-.dates-fields-advanced {
-  display: grid;
-  align-content: start;
-  gap: 8px;
-}
-
-.dates-fields--advanced {
   grid-template-columns: minmax(0, 1fr);
   min-height: 230px;
   gap: 4px;
   padding: 8px;
 }
 
-.dates-fields--advanced .dates-fields-main {
+.dates-fields-main {
+  display: grid;
+  align-content: start;
   gap: 4px;
 }
 
-.dates-fields--advanced .field-row {
+.first-due-date {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(157px, 0.9fr);
+  gap: 3px 10px;
+  align-items: center;
+}
+
+.first-due-date-title {
+  color: var(--navy);
+  font-size: 11px;
+}
+
+.single-due-date {
+  display: grid;
+  grid-template-columns: minmax(42px, 0.4fr) minmax(110px, 1fr);
+  gap: 5px;
+  min-width: 0;
+}
+
+.dates-fields .single-due-date input {
+  height: 21px;
+  text-align: right;
+}
+
+.single-due-date-status {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.dates-fields .field-row {
   min-height: 21px;
 }
 
-.dates-fields--advanced .field-row input,
-.dates-fields--advanced .field-row select {
+.dates-fields .field-row input,
+.dates-fields .field-row select {
   height: 21px;
 }
 
-.dates-fields--advanced .dates-fields-main .field-row input,
-.dates-fields--advanced .dates-fields-main .field-row select {
+.dates-fields .dates-fields-main .field-row input,
+.dates-fields .dates-fields-main .field-row select {
  text-align: right;
 }
 
@@ -296,7 +271,8 @@
 }
 
 .field-row input,
-.field-row select {
+.field-row select,
+.single-due-date input {
   width: 100%;
   min-width: 0;
   height: 25px;
@@ -316,12 +292,21 @@
 }
 
 .field-row input:focus,
-.field-row select:focus {
+.field-row select:focus,
+.single-due-date input:focus {
   border-bottom: 2px solid var(--blue);
 }
 
 .field-row input.currency-input {
   text-align: right;
+}
+
+.field-row input[data-comparacao='anterior'] {
+  color: var(--date-past);
+}
+
+.field-row input[data-comparacao='posterior'] {
+  color: var(--blue);
 }
 
 .field-label {
@@ -396,6 +381,14 @@
   flex-direction: column;
 }
 
+.interest-input {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--blue);
+  border-radius: 6px;
+  background: var(--focus-bg);
+}
+
 .interest-grid {
  display: grid;
  grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -440,8 +433,19 @@
 }
 
 .interest-value--input {
-  outline: 1px solid var(--blue);
+  outline: 1px solid var(--divider);
+  background: var(--surface);
+}
+
+.interest-value--selected {
+  outline: 2px solid var(--blue);
   background: var(--focus-bg);
+}
+
+.interest-input-hint {
+  margin: 5px 0 0;
+  color: var(--neutral-text);
+  font-size: 10px;
 }
 
 .interest-value--output {
@@ -590,11 +594,39 @@
   text-align: right;
 }
 
+.print-option {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 10px;
+  color: var(--neutral-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.print-option input {
+  accent-color: var(--blue);
+}
+
 .subpanel h2 {
   margin: 0 0 10px;
   color: var(--legend-ink);
   font-size: 13px;
   font-weight: 600;
+}
+
+.customization-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.customization-header h2 {
+  margin: 0;
 }
 
 .table-scroll {
@@ -644,15 +676,6 @@
 
 .custom-table th:nth-child(5) {
   width: 17%;
-}
-
-.principal-header {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  cursor: pointer;
 }
 
 .custom-table td {
@@ -761,6 +784,25 @@
 .custom-table input[type='number'],
 .custom-table input[type='text'] {
   text-align: right;
+}
+
+.custom-table input[aria-invalid='true'] {
+  border-color: #b42318;
+}
+
+.installment-error {
+  display: block;
+  color: #b42318;
+  font-size: 11px;
+}
+
+.restore-installment-value {
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font-size: 11px;
+  text-decoration: underline;
 }
 
 .custom-table input[type='checkbox'] {
@@ -1000,6 +1042,7 @@
     color-scheme: light;
     --navy: #073879;
     --blue: #145fa7;
+    --date-past: #b42318;
     --line: #18395b;
     --ink: #1b2b3d;
     --muted: #4b5560;
@@ -1033,6 +1076,7 @@
   }
 
   .actions,
+  .print-option,
   .theme-toggle,
   .insert-installment {
     display: none !important;
@@ -1218,12 +1262,12 @@
     gap: 10px;
   }
 
-  .dates-fields--advanced {
+  .dates-fields {
     grid-template-columns: 1fr;
     column-gap: 0;
   }
 
-  .dates-fields--advanced .field-row {
+  .dates-fields .field-row {
     grid-template-columns: minmax(100px, 1fr) minmax(90px, 0.9fr);
   }
 

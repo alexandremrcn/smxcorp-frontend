@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import type { AjusteParcela, Parcela } from '../model/simulacao'
+import { useRef } from 'react'
+import { formatarMoeda, type AjusteParcela, type LimitesParcela, type Parcela } from '../model/simulacao'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   minimumFractionDigits: 2,
@@ -7,11 +7,11 @@ const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
 })
 
 function formatarValorParcela(valor: number) {
-  return formatadorMoeda.format(Math.min(999_999.99, Math.max(0, valor)))
+  return formatadorMoeda.format(Math.min(999_999_999.99, Math.max(0, valor)))
 }
 
 function interpretarValorParcela(valor: string) {
-  const digitos = valor.replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, 8)
+  const digitos = valor.replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, 11)
   return Number(digitos || '0') / 100
 }
 
@@ -34,35 +34,43 @@ function existeDataEntre(dataInicial: string, dataFinal?: string) {
 
 interface PersonalizacaoProps {
   parcelas: Parcela[]
+  limites: (LimitesParcela | null)[]
+  errosValores: (string | null)[]
   onChange: (indice: number, ajuste: AjusteParcela) => void
-  onToggleAll: (cobrarPrincipal: boolean) => void
+  onValorEditadoBlur: () => void
+  onRestaurarValor: (indice: number) => void
   onInsertAfter: (indice: number) => void
   onDelete: (indice: number) => void
+  onInicializar: () => void
+  podeInicializar: boolean
   canAdd: boolean
+  vencimentoUnico: boolean
 }
 
 export default function Personalizacao({
   parcelas,
+  limites,
+  errosValores,
   onChange,
-  onToggleAll,
+  onValorEditadoBlur,
+  onRestaurarValor,
   onInsertAfter,
   onDelete,
+  onInicializar,
+  podeInicializar,
   canAdd,
+  vencimentoUnico,
 }: PersonalizacaoProps) {
-  const selectAllRef = useRef<HTMLInputElement>(null)
-  const parcelasEditaveis = parcelas.slice(0, -1)
-  const todasMarcadas = parcelasEditaveis.every((parcela) => parcela.cobrarPrincipal)
-  const algumaMarcada = parcelasEditaveis.some((parcela) => parcela.cobrarPrincipal)
-
-  useEffect(() => {
-    if (selectAllRef.current) {
-      selectAllRef.current.indeterminate = algumaMarcada && !todasMarcadas
-    }
-  }, [algumaMarcada, todasMarcadas])
+  const valorAlteradoEmFoco = useRef(false)
 
   return (
     <section className="subpanel customization-panel">
-      <h2>Personalize sua simulação: vencimentos, valores e cobrança de principal</h2>
+      <div className="customization-header">
+        <h2>Personalize sua simulação: vencimentos e valores</h2>
+        <button className="button button-secondary" type="button" onClick={onInicializar} disabled={!podeInicializar}>
+          Inicializar
+        </button>
+      </div>
       <div className="table-scroll">
         <table className="custom-table">
           <thead>
@@ -71,18 +79,7 @@ export default function Personalizacao({
               <th>Parcela</th>
               <th>Dt. vencimento</th>
               <th>Valor da parcela</th>
-              <th>
-                <label className="principal-header">
-                  <input
-                    ref={selectAllRef}
-                    aria-label="Marcar principal de todas as parcelas"
-                    type="checkbox"
-                    checked={todasMarcadas}
-                    onChange={(event) => onToggleAll(event.target.checked)}
-                  />
-                  <span>Principal</span>
-                </label>
-              </th>
+              <th scope="col">Principal</th>
             </tr>
           </thead>
           <tbody>
@@ -123,6 +120,8 @@ export default function Personalizacao({
                     aria-label={`Vencimento da parcela ${parcela.numero}`}
                     type="date"
                     value={parcela.dataVencimento}
+                    readOnly={vencimentoUnico}
+                    title={vencimentoUnico ? 'Altere a data na configuração de vencimento único.' : undefined}
                     min={deslocarData(parcelas[indice - 1]?.dataVencimento, 1)}
                     max={deslocarData(parcelas[indice + 1]?.dataVencimento, -1)}
                     onChange={(event) => onChange(indice, { dataVencimento: event.target.value })}
@@ -134,18 +133,45 @@ export default function Personalizacao({
                     type="text"
                     inputMode="numeric"
                     value={formatarValorParcela(parcela.valorParcela)}
-                    disabled={!parcela.cobrarPrincipal}
-                    onChange={(event) => onChange(indice, { valorParcela: interpretarValorParcela(event.target.value) })}
+                    disabled={indice === parcelas.length - 1 || !parcela.cobrarPrincipal || vencimentoUnico || !limites[indice]}
+                    title={vencimentoUnico
+                      ? 'O valor da parcela é calculado pelo sistema Price.'
+                      : indice === parcelas.length - 1
+                        ? 'O valor da última parcela é calculado automaticamente.'
+                        : !limites[indice]
+                          ? 'Calcule a simulação para obter juros e saldo de referência desta parcela.'
+                          : `Último cálculo: juros ${formatarMoeda(limites[indice].juros)}; saldo remanescente ${formatarMoeda(limites[indice].saldoRemanescente)}.`}
+                    aria-invalid={!!errosValores[indice]}
+                    aria-describedby={errosValores[indice] ? `erro-valor-parcela-${parcela.numero}` : undefined}
+                    onFocus={() => { valorAlteradoEmFoco.current = false }}
+                    onChange={(event) => {
+                      const valorParcela = interpretarValorParcela(event.target.value)
+                      if (valorParcela !== parcela.valorParcela) valorAlteradoEmFoco.current = true
+                      onChange(indice, { valorParcela })
+                    }}
+                    onBlur={() => {
+                      if (valorAlteradoEmFoco.current) onValorEditadoBlur()
+                      valorAlteradoEmFoco.current = false
+                    }}
                   />
+                  {errosValores[indice] && (
+                    <span className="installment-error" id={`erro-valor-parcela-${parcela.numero}`} role="alert">
+                      {errosValores[indice]}
+                    </span>
+                  )}
+                  {errosValores[indice] && (
+                    <button className="restore-installment-value" type="button" onClick={() => onRestaurarValor(indice)}>
+                      Restaurar valor automático
+                    </button>
+                  )}
                 </td>
                 <td>
                   <input
                     aria-label={`Cobrar principal da parcela ${parcela.numero}`}
                     type="checkbox"
                     checked={parcela.cobrarPrincipal}
-                    disabled={indice === parcelas.length - 1}
-                    title={indice === parcelas.length - 1 ? 'Obrigatório na última parcela' : undefined}
-                    onChange={(event) => onChange(indice, { cobrarPrincipal: event.target.checked })}
+                    disabled
+                    title="A cobrança de principal é definida pela configuração da simulação."
                   />
                 </td>
               </tr>

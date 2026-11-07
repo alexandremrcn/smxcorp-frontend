@@ -7,7 +7,7 @@ interface GraficoProps {
 
 export default function Grafico({ parcelas }: GraficoProps) {
   const altura = 240
-  const margem = { superior: 30, direita: 10, inferior: 34, esquerda: 50 }
+  const margem = { superior: 30, direita: 10, inferior: 50, esquerda: 50 }
   const larguraMinimaParcela = 76
   const largura = Math.max(760, margem.esquerda + margem.direita + parcelas.length * larguraMinimaParcela)
   const larguraUtil = largura - margem.esquerda - margem.direita
@@ -23,7 +23,7 @@ export default function Grafico({ parcelas }: GraficoProps) {
   )
   const larguraImpressao = 760
   const alturaImpressao = 165
-  const margemImpressao = { superior: 30, direita: 12, inferior: 30, esquerda: 55 }
+  const margemImpressao = { superior: 30, direita: 12, inferior: 46, esquerda: 55 }
   const larguraUtilImpressao = larguraImpressao - margemImpressao.esquerda - margemImpressao.direita
   const alturaUtilImpressao = alturaImpressao - margemImpressao.superior - margemImpressao.inferior
   const espacoImpressao = larguraUtilImpressao / parcelasPorFaixa
@@ -61,7 +61,8 @@ export default function Grafico({ parcelas }: GraficoProps) {
                 <text className="chart-value-label" x={x + larguraBarra / 2} y={Math.max(10, yJuros - 5)} textAnchor="middle">
                   {parcela.valorParcela.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </text>
-                <text className="chart-date-label" x={x + larguraBarra / 2} y={altura - 12} textAnchor="middle">{data}</text>
+                <text className="chart-date-label" x={x + larguraBarra / 2} y={altura - 26} textAnchor="middle">{data}</text>
+                <text className="chart-date-label" x={x + larguraBarra / 2} y={altura - 10} textAnchor="middle">{parcela.numero}</text>
               </g>
             )
           })}
@@ -105,7 +106,8 @@ export default function Grafico({ parcelas }: GraficoProps) {
                     <text className="chart-value-label chart-value-label--print" x={x + larguraBarraImpressao / 2} y={Math.max(10, yJuros - 5)} textAnchor="middle">
                       {parcela.valorParcela.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </text>
-                    <text className="chart-date-label" x={x + larguraBarraImpressao / 2} y={alturaImpressao - 9} textAnchor="middle">{data}</text>
+                    <text className="chart-date-label" x={x + larguraBarraImpressao / 2} y={alturaImpressao - 25} textAnchor="middle">{data}</text>
+                    <text className="chart-date-label" x={x + larguraBarraImpressao / 2} y={alturaImpressao - 9} textAnchor="middle">{parcela.numero}</text>
                   </g>
                 )
               })}

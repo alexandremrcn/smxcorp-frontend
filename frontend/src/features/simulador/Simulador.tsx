@@ -7,14 +7,23 @@ import Personalizacao from './components/Personalizacao'
 import Grafico from './components/Grafico'
 import Resultado from './components/Resultado'
 import {
+  MAX_PARCELAS,
   criarDadosZerados,
+  formatarMoeda,
   gerarParcelas,
+  isPeriodicidadeVencimento,
+  mesesPorPeriodicidade,
+  periodicidadesVencimento,
   sugerirDataVencimento,
+  validarValorParcela,
   type AjusteParcela,
   type DadosSimulacao,
+  type LimitesParcela,
   type Parcela,
 } from './model/simulacao'
 import {
+  ajustarVencimentoParaDiaUtil,
+  calcularDatasVencimento,
   calcularSimulacao,
   dataBackendParaISO,
   dataISOParaBackend,
@@ -25,12 +34,10 @@ import {
 import './simulador.css'
 
 type Tema = 'claro' | 'escuro'
-
-function periodicidadeBackend(periodicidade: number) {
-  if (periodicidade === 2) return 'B'
-  if (periodicidade === 3) return 'T'
-  return 'M'
-}
+type ConfiguracaoAntesPersonalizacao = Pick<
+  DadosSimulacao,
+  'quantidadeParcelas' | 'primeiraDataVencimento' | 'diaBaseVencimento' | 'sistemaAmortizacao'
+>
 
 function sistemaAmortizacaoBackend(sistema: DadosSimulacao['sistemaAmortizacao']) {
   const codigos = {
@@ -66,6 +73,13 @@ function montarPedidoSimulacao(
   vlSolicitado: number,
   vl1aParcela: number,
 ): SolicitarSimulacao {
+  if (dados.periodicidade === 'D' && sistemaAmortizacao !== 'Price') {
+    throw new Error('Vencimento único exige o sistema de amortização Price.')
+  }
+  if (sistemaAmortizacao === 'Price HP' && dados.diasUteis) {
+    throw new Error('Vencimento em dias úteis não está disponível para Price HP.')
+  }
+
   const pedido: SolicitarSimulacao = {
     vlSolicitado: vlSolicitado.toFixed(2),
     vl1aParcela: vl1aParcela.toFixed(2),
@@ -75,11 +89,11 @@ function montarPedidoSimulacao(
     taxa: dados.taxaJuros.toString(),
     periodicidadeTaxa: dados.periodicidadeTaxa,
     baseTaxa: String(dados.baseDias),
-    periodicidadeVcto: periodicidadeBackend(dados.periodicidade),
+    periodicidadeVcto: dados.periodicidade,
     idDiaUtil: dados.diasUteis ? 'S' : 'N',
     tipoJuros: 'S',
     qtdeParcelas: String(parcelas.length),
-    qtdeDiasCarencia: String(Math.max(0, dados.diasCarencia)),
+    qtdeDiasCarencia: '0',
     diaBaseVencimento: String(dados.diaBaseVencimento),
     cdSistemaAmortizacao: sistemaAmortizacaoBackend(sistemaAmortizacao),
     tpNegociacaoIof: dados.modoValor === 'primeiraParcela' ? '2' : '1',
@@ -91,16 +105,23 @@ function montarPedidoSimulacao(
   if (sistemaAmortizacao === 'Especial') {
     pedido.idCobrJuros = parcelas.map(() => 'S')
     pedido.idCobrPrinc = parcelas.map((parcela) => parcela.cobrarPrincipal ? 'S' : 'N')
-    pedido.vlParcelaIn = parcelas.map((parcela) => (
-      parcela.cobrarPrincipal ? parcela.valorParcela.toFixed(2) : '0.00'
+    pedido.vlParcelaIn = parcelas.map((parcela, indice) => (
+      parcela.cobrarPrincipal && ajustes[indice]?.valorEditado
+        ? (ajustes[indice].valorParcela ?? 0).toFixed(2)
+        : '0.00'
     ))
-    pedido.idTipoParcelaIn = parcelas.map((_, indice) => ajustes[indice]?.alterada ? 'A' : 'N')
-    pedido.dtVencimento = datasVencimento.map(dataISOParaBackend)
+    pedido.idTipoParcelaIn = parcelas.map((_, indice) => (
+      ajustes[indice]?.valorParcela !== undefined && !ajustes[indice]?.valorEditado ? 'N' : 'A'
+    ))
   } else {
     pedido.idCobrJuros = parcelas.map(() => 'S')
     pedido.idCobrPrinc = parcelas.map(() => 'S')
     pedido.vlParcelaIn = parcelas.map(() => '0.00')
     pedido.idTipoParcelaIn = parcelas.map(() => 'A')
+  }
+
+  if (sistemaAmortizacao !== 'Price HP') {
+    pedido.dtVencimento = datasVencimento.map(dataISOParaBackend)
   }
 
   return pedido
@@ -136,7 +157,7 @@ function parcelasPrevistas(dados: DadosSimulacao, ajustes: AjusteParcela[]) {
     || !dados.primeiraDataVencimento
     || !Number.isInteger(dados.quantidadeParcelas)
     || dados.quantidadeParcelas < 1
-    || dados.quantidadeParcelas > 380
+    || dados.quantidadeParcelas > MAX_PARCELAS
   ) {
     return []
   }
@@ -154,11 +175,9 @@ function parcelasPrevistas(dados: DadosSimulacao, ajustes: AjusteParcela[]) {
   })
 }
 
-function contarParcelasPrincipal(parcelas: Parcela[], ajustes: AjusteParcela[]) {
-  return parcelas.reduce((quantidade, parcela, indice) => {
-    const cobrarPrincipal = ajustes[indice]?.cobrarPrincipal ?? parcela.cobrarPrincipal
-    return quantidade + (cobrarPrincipal ? 1 : 0)
-  }, 0)
+function contarPeriodosCarencia(cobrancasPrincipal: boolean[]) {
+  const primeiroPrincipal = cobrancasPrincipal.findIndex(Boolean)
+  return primeiroPrincipal < 0 ? cobrancasPrincipal.length : primeiroPrincipal
 }
 
 function parcelasDaSimulacao(resultado: ResultadoSimulacao): Parcela[] {
@@ -190,15 +209,35 @@ export default function Simulador() {
   ))
   const [dados, setDados] = useState<DadosSimulacao>(criarDadosZerados)
   const [ajustes, setAjustes] = useState<AjusteParcela[]>([])
+  const [limitesParcelas, setLimitesParcelas] = useState<(LimitesParcela | null)[]>([])
   const [avisoImpressao, setAvisoImpressao] = useState('')
+  const [incluirGraficoPdf, setIncluirGraficoPdf] = useState(true)
   const [resultadoSimulacao, setResultadoSimulacao] = useState<ResultadoSimulacao | null>(null)
   const [calculando, setCalculando] = useState(false)
   const [erroBackend, setErroBackend] = useState('')
   const [resultadoDescartado, setResultadoDescartado] = useState(false)
   const [personalizacaoPendente, setPersonalizacaoPendente] = useState(false)
+  const [vencimentoAjustado, setVencimentoAjustado] = useState<{ chave: string; data?: string; erro?: string } | null>(null)
   const calculoAtual = useRef(0)
+  const calculoAposEdicao = useRef<number | null>(null)
   const sistemaAmortizacaoAntesPersonalizacao = useRef<DadosSimulacao['sistemaAmortizacao']>('Price')
-  const parcelasEmPrevia = parcelasPrevistas(dados, ajustes)
+  const configuracaoAntesPersonalizacao = useRef<ConfiguracaoAntesPersonalizacao | null>(null)
+  const dataInformada = dados.primeiraDataVencimento
+  const chaveVencimento = `${dados.sistemaAmortizacao}|${dados.periodicidade}|${dados.dataSimulacao}|${dataInformada}`
+  const precisaAjustar = !!dados.dataSimulacao && !!dataInformada && (
+    (dados.periodicidade === 'D' && dados.diasUteis) || dados.sistemaAmortizacao === 'Price HP'
+  )
+  const ajusteAtual = vencimentoAjustado?.chave === chaveVencimento ? vencimentoAjustado : null
+  const primeiroVencimento = precisaAjustar ? ajusteAtual?.data ?? '' : dataInformada
+  const dataExibida = primeiroVencimento || dataInformada
+  const diasPrimeiroVencimento = dados.dataSimulacao && dataExibida
+    ? diferencaEmDias(dados.dataSimulacao, dataExibida)
+    : 0
+  const avisoVencimentoUnico = precisaAjustar && !primeiroVencimento
+    ? ajusteAtual?.erro ?? 'Consultando o vencimento no backend...'
+    : ''
+  const dadosParaCalculo = { ...dados, primeiraDataVencimento: primeiroVencimento }
+  const parcelasEmPrevia = parcelasPrevistas(dadosParaCalculo, ajustes)
   const manterPreviaNoErro = erroBackend !== '' && dados.sistemaAmortizacao === 'Especial'
   const parcelas = resultadoDescartado || (erroBackend && !manterPreviaNoErro)
     ? []
@@ -206,7 +245,17 @@ export default function Simulador() {
       ? parcelasDaSimulacao(resultadoSimulacao)
       : parcelasEmPrevia
   const parcelasParaAnalise = personalizacaoPendente ? [] : parcelas
+  const errosValores = parcelas.map((parcela, indice) => {
+    const ajuste = ajustes[indice]
+    if (resultadoSimulacao || !parcela.cobrarPrincipal || !ajuste?.valorEditado || ajuste.valorParcela === undefined) return null
+    const limites = limitesParcelas[indice]
+    if (!limites) return 'Calcule a simulação para obter os limites desta parcela.'
+    if (validarValorParcela(ajuste.valorParcela, limites)) return null
+    return `Informe valor igual ou superior aos juros (${formatarMoeda(limites.juros)}) e menor que o saldo remanescente (${formatarMoeda(limites.saldoRemanescente)}) do último cálculo.`
+  })
+  const temValorInvalido = errosValores.some(Boolean)
   const totalJuros = parcelas.reduce((total, parcela) => total + parcela.valorJuros, 0)
+  const podeExportar = resultadoSimulacao !== null && !calculando && !personalizacaoPendente && !erroBackend
 
   useEffect(() => {
     document.documentElement.dataset.theme = tema
@@ -214,27 +263,66 @@ export default function Simulador() {
   }, [tema])
 
   useEffect(() => {
-    document.title = 'Simulador financeiro | SMX Corp'
+    document.title = 'Plataforma de Modelagem Financeira | SMX Corp'
   }, [])
 
+  useEffect(() => () => {
+    if (calculoAposEdicao.current !== null) window.clearTimeout(calculoAposEdicao.current)
+  }, [])
+
+  useEffect(() => {
+    if (!precisaAjustar) return
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => {
+      controller.abort()
+      setVencimentoAjustado({ chave: chaveVencimento, erro: 'Não foi possível ajustar o vencimento: a consulta ao backend demorou demais.' })
+    }, 15000)
+    const consulta = dados.sistemaAmortizacao === 'Price HP'
+      ? calcularDatasVencimento({
+          dataSimulacao: dados.dataSimulacao,
+          primeiraDataVencimento: dataInformada,
+          diaBaseVencimento: dados.diaBaseVencimento,
+          diasUteis: dados.diasUteis,
+          periodicidade: dados.periodicidade,
+          sistemaAmortizacao: dados.sistemaAmortizacao,
+          quantidadeParcelas: 1,
+        }, controller.signal).then((datas) => datas[0])
+      : ajustarVencimentoParaDiaUtil(dados.dataSimulacao, dataInformada, controller.signal)
+    consulta
+      .then((data) => setVencimentoAjustado({ chave: chaveVencimento, data }))
+      .catch((erro: unknown) => {
+        if (controller.signal.aborted) return
+        setVencimentoAjustado({
+          chave: chaveVencimento,
+          erro: erro instanceof Error ? `Não foi possível ajustar o vencimento: ${erro.message}` : 'Não foi possível ajustar o vencimento.',
+        })
+      })
+      .finally(() => window.clearTimeout(timeout))
+    return () => {
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [precisaAjustar, dados.dataSimulacao, dados.sistemaAmortizacao, dados.periodicidade, dados.diaBaseVencimento, dados.diasUteis, dataInformada, chaveVencimento])
+
   function atualizarDado<K extends keyof DadosSimulacao>(campo: K, valor: DadosSimulacao[K]) {
+    if (dados.periodicidade === 'D' && (campo === 'sistemaAmortizacao' || campo === 'periodosCarencia')) return
     // Alterar uma entrada após o cálculo invalida resultado, gráfico e fluxo de vencimentos.
     const havia = resultadoSimulacao !== null
     const estavaNoFluxoEspecial = dados.sistemaAmortizacao === 'Especial'
     if (havia) setResultadoDescartado(true)
 
-    if (campo === 'qtdeParcelasPrincipal' && typeof valor === 'number' && !estavaNoFluxoEspecial) {
-      const quantidadeValida = Math.max(1, Math.min(dados.quantidadeParcelas, Math.floor(valor) || 1))
-      const primeirosIndiceDesmarcado = Math.max(0, parcelas.length - quantidadeValida)
-      const novosAjustes = parcelas.map((parcela, indice) => ({
+    if (campo === 'periodosCarencia' && typeof valor === 'number') {
+      guardarConfiguracaoAntesPersonalizacao()
+      const quantidadeValida = Math.max(0, Math.min(dados.quantidadeParcelas - 1, Math.floor(valor) || 0))
+      const parcelasAtuais = parcelas.length ? parcelas : parcelasEmPrevia
+      const novosAjustes = parcelasAtuais.map((_, indice) => ({
         ...ajustes[indice],
-        dataVencimento: parcela.dataVencimento,
-        cobrarPrincipal: indice >= primeirosIndiceDesmarcado,
-        alterada: true,
+        cobrarPrincipal: indice >= quantidadeValida,
       }))
 
       calculoAtual.current += 1
       setResultadoSimulacao(null)
+      setResultadoDescartado(false)
       setCalculando(false)
       setErroBackend('')
       setAjustes(novosAjustes)
@@ -244,15 +332,20 @@ export default function Simulador() {
         }
         return {
           ...atuais,
-          qtdeParcelasPrincipal: quantidadeValida,
+          periodosCarencia: quantidadeValida,
           sistemaAmortizacao: 'Especial',
         }
       })
       return
     }
 
+    configuracaoAntesPersonalizacao.current = null
+    setLimitesParcelas([])
     if (estavaNoFluxoEspecial) {
       sistemaAmortizacaoAntesPersonalizacao.current = 'Price'
+      setAjustes([])
+    } else if (campo === 'sistemaAmortizacao' && valor === 'Especial') {
+      sistemaAmortizacaoAntesPersonalizacao.current = dados.sistemaAmortizacao
       setAjustes([])
     } else if (campo === 'sistemaAmortizacao') {
       sistemaAmortizacaoAntesPersonalizacao.current = valor as DadosSimulacao['sistemaAmortizacao']
@@ -278,23 +371,39 @@ export default function Simulador() {
     setDados((atuais) => {
       const atualizados = { ...atuais, [campo]: valor }
 
+      if (campo === 'sistemaAmortizacao' && valor === 'Especial') {
+        atualizados.periodosCarencia = 0
+      }
+
+      if (campo === 'periodicidade' && valor === 'D') {
+        atualizados.quantidadeParcelas = 1
+        atualizados.periodosCarencia = 0
+      }
+
       if (campo === 'quantidadeParcelas' && typeof valor === 'number') {
-        atualizados.qtdeParcelasPrincipal = Math.max(0, Math.min(380, Math.floor(valor) || 0))
+        atualizados.quantidadeParcelas = Math.max(0, Math.min(MAX_PARCELAS, Math.floor(valor) || 0))
+        atualizados.periodosCarencia = 0
       }
 
-      if (campo === 'qtdeParcelasPrincipal' && typeof valor === 'number' && estavaNoFluxoEspecial) {
-        atualizados.qtdeParcelasPrincipal = Math.max(1, Math.min(atuais.quantidadeParcelas, Math.floor(valor) || 1))
+      if (atualizados.periodicidade === 'D') {
+        atualizados.quantidadeParcelas = 1
+        atualizados.periodosCarencia = 0
+        atualizados.sistemaAmortizacao = 'Price'
       }
 
-      if (!estavaNoFluxoEspecial && campo === 'sistemaAmortizacao' && valor === 'Price HP') {
+      if (campo === 'sistemaAmortizacao' && valor === 'Price HP') {
         atualizados.diasUteis = false
-        atualizados.primeiraDataVencimento = proximoMes(atuais.dataSimulacao)
+        if (atuais.dataSimulacao) {
+          atualizados.diaBaseVencimento = Number(atuais.dataSimulacao.slice(-2))
+          atualizados.primeiraDataVencimento = proximoMes(atuais.dataSimulacao)
+        }
       }
 
       if (campo === 'dataSimulacao' && typeof valor === 'string' && valor) {
-        const dia = Number(valor.slice(-2))
-        atualizados.diaBaseVencimento = dia
         atualizados.primeiraDataVencimento = proximoMes(valor)
+        if (atualizados.sistemaAmortizacao === 'Price HP') {
+          atualizados.diaBaseVencimento = Number(valor.slice(-2))
+        }
       }
 
       if (campo === 'modoValor') {
@@ -313,16 +422,34 @@ export default function Simulador() {
         if (atualizados.modoValor === 'primeiraParcela') atualizados.valorCredito = 0
       }
 
-      if (estavaNoFluxoEspecial) {
+      if (estavaNoFluxoEspecial && campo !== 'sistemaAmortizacao') {
         atualizados.sistemaAmortizacao = 'Price'
-        atualizados.diasCarencia = 0
+        atualizados.periodosCarencia = 0
+      }
+
+      if (campo === 'dataSimulacao' || campo === 'diaBaseVencimento'
+        || campo === 'primeiraDataVencimento' || campo === 'periodicidade' || campo === 'diasUteis'
+        || campo === 'quantidadeParcelas' || campo === 'sistemaAmortizacao') {
+        atualizados.periodosCarencia = 0
       }
 
       return atualizados
     })
   }
 
+  function guardarConfiguracaoAntesPersonalizacao() {
+    if (configuracaoAntesPersonalizacao.current) return
+    configuracaoAntesPersonalizacao.current = {
+      quantidadeParcelas: dados.quantidadeParcelas,
+      primeiraDataVencimento: dados.primeiraDataVencimento,
+      diaBaseVencimento: dados.diaBaseVencimento,
+      sistemaAmortizacao: dados.sistemaAmortizacao,
+    }
+  }
+
   function atualizarParcela(indice: number, ajuste: AjusteParcela) {
+    if (dados.periodicidade === 'D') return
+    if (ajuste.valorParcela !== undefined && (indice === parcelas.length - 1 || !limitesParcelas[indice])) return
     if (ajuste.dataVencimento !== undefined) {
       const dataAnterior = parcelas[indice - 1]?.dataVencimento
       const proximaData = parcelas[indice + 1]?.dataVencimento
@@ -335,6 +462,7 @@ export default function Simulador() {
       }
     }
 
+    guardarConfiguracaoAntesPersonalizacao()
     setPersonalizacaoPendente(true)
     const valorFoiAlterado = ajuste.valorParcela !== undefined
       && ajuste.valorParcela !== parcelas[indice]?.valorParcela
@@ -346,7 +474,7 @@ export default function Simulador() {
     novosAjustes[indice] = {
       ...novosAjustes[indice],
       ...ajuste,
-      alterada: novosAjustes[indice]?.alterada || valorFoiAlterado,
+      valorEditado: novosAjustes[indice]?.valorEditado || valorFoiAlterado,
     }
     setAjustes(novosAjustes)
     setDados((atuais) => {
@@ -356,46 +484,26 @@ export default function Simulador() {
       return {
         ...atuais,
         sistemaAmortizacao: 'Especial',
-        qtdeParcelasPrincipal: ajuste.cobrarPrincipal !== undefined
-          ? contarParcelasPrincipal(parcelas, novosAjustes)
-          : atuais.qtdeParcelasPrincipal,
         ...(indice === 0 && ajuste.dataVencimento
           ? {
               primeiraDataVencimento: ajuste.dataVencimento,
-              diaBaseVencimento: Number(ajuste.dataVencimento.slice(-2)),
             }
           : {}),
       }
     })
   }
 
-  function atualizarTodasParcelas(cobrarPrincipal: boolean) {
-    setPersonalizacaoPendente(true)
-    calculoAtual.current += 1
-    setResultadoSimulacao(null)
-    setCalculando(false)
-    setErroBackend('')
-    setAjustes((atuais) => Array.from({ length: parcelas.length }, (_, indice) => {
-      const cobrar = indice === parcelas.length - 1 || cobrarPrincipal
-      return {
-        ...atuais[indice],
-        cobrarPrincipal: cobrar,
-      }
-    }))
-    setDados((atuais) => {
-      if (atuais.sistemaAmortizacao !== 'Especial') {
-        sistemaAmortizacaoAntesPersonalizacao.current = atuais.sistemaAmortizacao
-      }
-      return {
-        ...atuais,
-        sistemaAmortizacao: 'Especial',
-        qtdeParcelasPrincipal: cobrarPrincipal ? parcelas.length : 1,
-      }
+  function restaurarValorParcela(indice: number) {
+    setAjustes((atuais) => {
+      const novos = [...atuais]
+      novos[indice] = { ...novos[indice], valorParcela: undefined, valorEditado: false }
+      return novos
     })
+    setErroBackend('')
   }
 
   function inserirParcelaApos(indice: number) {
-    if (parcelas.length >= 380) return
+    if (parcelas.length >= MAX_PARCELAS || dados.quantidadeParcelas >= MAX_PARCELAS || dados.periodicidade === 'D') return
     calculoAtual.current += 1
     setResultadoSimulacao(null)
     setCalculando(false)
@@ -404,7 +512,7 @@ export default function Simulador() {
     const novaData = sugerirDataVencimento(
       parcelas[indice].dataVencimento,
       parcelas[indice + 1]?.dataVencimento,
-      dados.periodicidade,
+      mesesPorPeriodicidade(dados.periodicidade),
     )
     if (
       novaData <= parcelas[indice].dataVencimento
@@ -412,20 +520,26 @@ export default function Simulador() {
     ) {
       return
     }
+    guardarConfiguracaoAntesPersonalizacao()
     setPersonalizacaoPendente(true)
     const novosAjustes = parcelas.map((parcela, indiceParcela) => ({
       ...ajustes[indiceParcela],
       dataVencimento: parcela.dataVencimento,
+      cobrarPrincipal: parcela.cobrarPrincipal,
     }))
 
     novosAjustes.splice(indice + 1, 0, {
       dataVencimento: novaData,
       valorParcela: 0,
       cobrarPrincipal: true,
-      alterada: true,
     })
 
     setAjustes(novosAjustes)
+    setLimitesParcelas((atuais) => {
+      const limites = Array.from({ length: parcelas.length }, (_, i) => atuais[i] ?? null)
+      limites.splice(indice + 1, 0, null)
+      return limites
+    })
     setDados((atuais) => {
       if (atuais.sistemaAmortizacao !== 'Especial') {
         sistemaAmortizacaoAntesPersonalizacao.current = atuais.sistemaAmortizacao
@@ -433,6 +547,7 @@ export default function Simulador() {
       return {
         ...atuais,
         quantidadeParcelas: atuais.quantidadeParcelas + 1,
+        periodosCarencia: contarPeriodosCarencia(novosAjustes.map((ajuste) => ajuste.cobrarPrincipal)),
         sistemaAmortizacao: 'Especial',
       }
     })
@@ -440,6 +555,7 @@ export default function Simulador() {
 
   function excluirParcela(indice: number) {
     if (parcelas.length <= 1) return
+    guardarConfiguracaoAntesPersonalizacao()
     setPersonalizacaoPendente(true)
     calculoAtual.current += 1
     setResultadoSimulacao(null)
@@ -449,19 +565,28 @@ export default function Simulador() {
     const novosAjustes = parcelas.map((parcela, indiceParcela) => ({
       ...ajustes[indiceParcela],
       dataVencimento: parcela.dataVencimento,
-      valorParcela: parcela.valorParcela,
+      valorParcela: ajustes[indiceParcela]?.valorEditado
+        ? ajustes[indiceParcela].valorParcela
+        : parcela.valorParcela,
       cobrarPrincipal: parcela.cobrarPrincipal,
     }))
     novosAjustes.splice(indice, 1)
     const ultimoAjuste = novosAjustes[novosAjustes.length - 1]
-    if (ultimoAjuste && !ultimoAjuste.cobrarPrincipal) {
+    if (ultimoAjuste) {
       novosAjustes[novosAjustes.length - 1] = {
         ...ultimoAjuste,
         cobrarPrincipal: true,
+        valorParcela: undefined,
+        valorEditado: false,
       }
     }
 
     setAjustes(novosAjustes)
+    setLimitesParcelas((atuais) => {
+      const limites = Array.from({ length: parcelas.length }, (_, i) => atuais[i] ?? null)
+      limites.splice(indice, 1)
+      return limites
+    })
     setDados((atuais) => {
       if (atuais.sistemaAmortizacao !== 'Especial') {
         sistemaAmortizacaoAntesPersonalizacao.current = atuais.sistemaAmortizacao
@@ -469,17 +594,46 @@ export default function Simulador() {
       return {
         ...atuais,
         quantidadeParcelas: atuais.quantidadeParcelas - 1,
+        periodosCarencia: contarPeriodosCarencia(novosAjustes.map((ajuste) => ajuste.cobrarPrincipal)),
         sistemaAmortizacao: 'Especial',
+      }
+    })
+  }
+
+  function inicializarPersonalizacao() {
+    const configuracao = configuracaoAntesPersonalizacao.current
+    configuracaoAntesPersonalizacao.current = null
+    if (configuracao && configuracao.sistemaAmortizacao !== 'Especial') {
+      sistemaAmortizacaoAntesPersonalizacao.current = configuracao.sistemaAmortizacao
+    }
+    calculoAtual.current += 1
+    setAjustes([])
+    setLimitesParcelas([])
+    setResultadoSimulacao(null)
+    setResultadoDescartado(false)
+    setPersonalizacaoPendente(false)
+    setCalculando(false)
+    setErroBackend('')
+    setAvisoImpressao('')
+    setDados((atuais) => {
+      const restaurados = { ...atuais, ...configuracao }
+      return {
+        ...restaurados,
+        periodosCarencia: 0,
+        valorFinanciamento: 0,
+        valorCredito: restaurados.modoValor === 'primeiraParcela' ? 0 : restaurados.valorCredito,
       }
     })
   }
 
   function limparSimulacao() {
     calculoAtual.current += 1
+    configuracaoAntesPersonalizacao.current = null
     sistemaAmortizacaoAntesPersonalizacao.current = 'Price'
     setPersonalizacaoPendente(false)
     setDados(criarDadosZerados())
     setAjustes([])
+    setLimitesParcelas([])
     setResultadoSimulacao(null)
     setResultadoDescartado(false)
     setCalculando(false)
@@ -498,18 +652,27 @@ export default function Simulador() {
   }
 
   async function calcular() {
+    if (temValorInvalido) {
+      setErroBackend('Corrija os valores das parcelas destacados antes de calcular.')
+      return
+    }
+    if (precisaAjustar && !primeiroVencimento) {
+      exibirErroCalculo(avisoVencimentoUnico || 'Informe uma data de simulação válida.')
+      return
+    }
     if (
       !dados.dataSimulacao
-      || !dados.primeiraDataVencimento
+      || !dadosParaCalculo.primeiraDataVencimento
+      || dadosParaCalculo.primeiraDataVencimento <= dados.dataSimulacao
       || !Number.isInteger(dados.quantidadeParcelas)
       || dados.quantidadeParcelas < 1
-      || dados.quantidadeParcelas > 380
+      || dados.quantidadeParcelas > MAX_PARCELAS
       || !Number.isFinite(dados.modoValor === 'credito' ? dados.valorCredito : dados.valorPrimeiraParcela)
       || (dados.modoValor === 'credito' ? dados.valorCredito : dados.valorPrimeiraParcela) <= 0
       || !Number.isFinite(dados.taxaJuros)
       || dados.taxaJuros < 0
     ) {
-      exibirErroCalculo('Preencha as datas, informe um valor solicitado ou valor da 1ª parcela maior que zero e uma quantidade válida de parcelas (1 a 380).')
+      exibirErroCalculo(`Preencha as datas, informe um valor solicitado ou valor da 1ª parcela maior que zero e uma quantidade válida de parcelas (1 a ${MAX_PARCELAS}).`)
       return
     }
 
@@ -522,16 +685,18 @@ export default function Simulador() {
     setResultadoDescartado(false)
 
     try {
-      const parcelasReferencia = gerarParcelas(dados, ajustes)
-      const datasVencimento = parcelasReferencia.map((parcela, indice) => (
-        ajustes[indice]?.dataVencimento ?? parcela.dataVencimento
+      const parcelasReferencia = gerarParcelas(dadosParaCalculo, ajustes)
+      const datasPadrao = await calcularDatasVencimento(dadosParaCalculo)
+      if (idCalculo !== calculoAtual.current) return
+      const datasVencimento = parcelasReferencia.map((_, indice) => (
+        ajustes[indice]?.dataVencimento ?? datasPadrao[indice]
       ))
       let vlSolicitado = dados.modoValor === 'credito' ? dados.valorCredito : 0
       let vl1aParcela = dados.modoValor === 'primeiraParcela' ? dados.valorPrimeiraParcela : 0
 
       if (dados.sistemaAmortizacao === 'Especial' && dados.modoValor === 'primeiraParcela') {
         const pedidoValorPresente = montarPedidoSimulacao(
-          dados,
+          dadosParaCalculo,
           parcelasReferencia,
           datasVencimento,
           ajustes,
@@ -562,9 +727,9 @@ export default function Simulador() {
         : dados.sistemaAmortizacao === 'Especial'
           ? vlSolicitado
           : 0
-      const parcelasBase = gerarParcelas({ ...dados, valorFinanciamento: valorBaseParcelas }, ajustes)
+      const parcelasBase = gerarParcelas({ ...dadosParaCalculo, valorFinanciamento: valorBaseParcelas }, ajustes)
       const pedido = montarPedidoSimulacao(
-        dados,
+        dadosParaCalculo,
         parcelasBase,
         datasVencimento,
         ajustes,
@@ -595,19 +760,32 @@ export default function Simulador() {
         resultado.vlPrincipal.length,
         resultado.vlSdoRemanescente.length,
       ]
+      if (!Number.isInteger(resultado.qtdeParcelas) || resultado.qtdeParcelas < 1 || resultado.qtdeParcelas > MAX_PARCELAS) {
+        throw new Error(`O backend retornou uma quantidade de parcelas fora do limite de 1 a ${MAX_PARCELAS}.`)
+      }
       if (comprimentos.some((comprimento) => comprimento !== resultado.qtdeParcelas)) {
         throw new Error('O backend retornou dados incompletos para as parcelas.')
       }
-      const quantidadeParcelasPrincipal = resultado.idCobraPrincipal.filter((cobraPrincipal) => cobraPrincipal === 'S').length
+      if (dados.periodicidade === 'D' && resultado.qtdeParcelas !== 1) {
+        throw new Error('O backend retornou uma quantidade de parcelas diferente de um para vencimento único.')
+      }
+      if (resultado.qtdeParcelas !== datasVencimento.length
+        || resultado.dtVencimento.some((data, indice) => dataBackendParaISO(data) !== datasVencimento[indice])) {
+        throw new Error('O backend retornou datas de vencimento diferentes das informadas.')
+      }
       setDados((atuais) => ({
         ...atuais,
         valorCredito: atuais.modoValor === 'credito'
           ? atuais.valorCredito
           : numeroBackend(resultado.vlLiberado),
         valorFinanciamento: numeroBackend(resultado.vlFinanciado),
-        qtdeParcelasPrincipal: quantidadeParcelasPrincipal,
+        periodosCarencia: contarPeriodosCarencia(resultado.idCobraPrincipal.map((cobraPrincipal) => cobraPrincipal === 'S')),
       }))
       setResultadoSimulacao(resultado)
+      setLimitesParcelas(resultado.vlJuros.map((juros, indice) => ({
+        juros: numeroBackend(juros),
+        saldoRemanescente: numeroBackend(resultado.vlSdoRemanescente[indice]),
+      })))
     } catch (erro: unknown) {
       if (idCalculo === calculoAtual.current) {
         exibirErroCalculo(erro instanceof Error ? erro.message : 'Não foi possível calcular a simulação.')
@@ -617,7 +795,19 @@ export default function Simulador() {
     }
   }
 
+  function calcularAposEdicao() {
+    if (temValorInvalido) return
+    if (calculoAposEdicao.current !== null) window.clearTimeout(calculoAposEdicao.current)
+    const versao = calculoAtual.current
+    calculoAposEdicao.current = window.setTimeout(() => {
+      calculoAposEdicao.current = null
+      if (calculoAtual.current === versao) void calcular()
+    }, 0)
+  }
+
   async function exportarParaExcel() {
+    if (!podeExportar) return
+    const idCalculo = calculoAtual.current
     let exceljs: typeof import('exceljs')
     try {
       exceljs = await import('exceljs')
@@ -680,8 +870,8 @@ export default function Simulador() {
         ? ({ 1: 'Price HP', 2: 'Price', 3: 'SAC', 4: 'Especial' }[resultadoSimulacao.sistemaAmortizacao] ?? resultadoSimulacao.sistemaAmortizacao)
         : dados.sistemaAmortizacao],
       ['Periodicidade dos vencimentos', resultadoSimulacao
-        ? ({ M: 'Mensal', B: 'Bimestral', T: 'Trimestral', A: 'Anual', D: 'Diária' }[resultadoSimulacao.periodicidadeVcto] ?? resultadoSimulacao.periodicidadeVcto)
-        : ({ 1: 'Mensal', 2: 'Bimestral', 3: 'Trimestral' }[dados.periodicidade] ?? dados.periodicidade)],
+        ? (isPeriodicidadeVencimento(resultadoSimulacao.periodicidadeVcto) ? periodicidadesVencimento[resultadoSimulacao.periodicidadeVcto] : resultadoSimulacao.periodicidadeVcto)
+        : periodicidadesVencimento[dados.periodicidade]],
     ])
     resumo.getColumn(2).alignment = { horizontal: 'right' }
     for (const linha of [3, 4, 5]) {
@@ -734,6 +924,10 @@ export default function Simulador() {
 
     try {
       const conteudo = await workbook.xlsx.writeBuffer()
+      if (idCalculo !== calculoAtual.current) {
+        setAvisoImpressao('A simulação foi alterada durante a exportação. Calcule novamente para exportar.')
+        return
+      }
       const arquivo = new Blob([conteudo], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       })
@@ -749,6 +943,7 @@ export default function Simulador() {
   }
 
   function abrirRelatorioPdf() {
+    if (!podeExportar) return
     const simuladorAtual = document.querySelector<HTMLElement>('.simulator')
     if (!simuladorAtual) return
 
@@ -764,6 +959,10 @@ export default function Simulador() {
     documentoPdf.documentElement.dataset.theme = 'claro'
     documentoPdf.title = 'Simulação financeira SMX Corp'
 
+    const metaCharset = documentoPdf.createElement('meta')
+    metaCharset.setAttribute('charset', 'utf-8')
+    documentoPdf.head.append(metaCharset)
+
     const metaViewport = documentoPdf.createElement('meta')
     metaViewport.name = 'viewport'
     metaViewport.content = 'width=device-width, initial-scale=1.0'
@@ -773,10 +972,40 @@ export default function Simulador() {
       documentoPdf.head.append(estilo.cloneNode(true))
     })
 
+    const estiloPaginas = documentoPdf.createElement('style')
+    estiloPaginas.textContent = `
+      @page {
+        size: A4 landscape;
+        margin: 18mm 10mm 15mm;
+        @top-left {
+          content: "SMX Corp — Simulação financeira";
+          color: #073879;
+          font: 600 10pt sans-serif;
+        }
+        @bottom-left {
+          content: "Simulação para fins de planejamento";
+          color: #4b5560;
+          font: 9pt sans-serif;
+        }
+        @bottom-right {
+          content: "Página " counter(page) " de " counter(pages);
+          color: #4b5560;
+          font: 9pt sans-serif;
+        }
+      }
+    `
+    documentoPdf.head.append(estiloPaginas)
+
     const raizPdf = documentoPdf.createElement('div')
     raizPdf.id = 'root'
 
     const relatorioPdf = simuladorAtual.cloneNode(true) as HTMLElement
+    const seletoresOriginais = simuladorAtual.querySelectorAll('select')
+    relatorioPdf.querySelectorAll('select').forEach((seletor, indice) => {
+      Array.from(seletor.options).forEach((opcao, indiceOpcao) => {
+        opcao.selected = seletoresOriginais[indice].options[indiceOpcao].selected
+      })
+    })
     relatorioPdf.querySelector('.actions')?.remove()
     relatorioPdf.querySelector('.theme-toggle')?.remove()
     relatorioPdf.querySelectorAll('.api-status').forEach((status) => status.remove())
@@ -784,6 +1013,7 @@ export default function Simulador() {
     relatorioPdf.querySelectorAll('.delete-installment').forEach((botao) => botao.remove())
 
     relatorioPdf.querySelector('.customization-panel')?.remove()
+    if (!incluirGraficoPdf) relatorioPdf.querySelector('.analysis-panel')?.remove()
 
     relatorioPdf.classList.add('pdf-report')
 
@@ -807,7 +1037,14 @@ export default function Simulador() {
 
       <section className="input-grid" aria-label="Dados da simulação">
         <ValorPrazo dados={dados} valorIof={resultadoSimulacao?.vlIof} disabled={personalizacaoPendente} onChange={atualizarDado} />
-        <DefinicaoDatas dados={dados} disabled={personalizacaoPendente} onChange={atualizarDado} />
+        <DefinicaoDatas
+          dados={dados}
+          disabled={personalizacaoPendente}
+          primeiroVencimento={dataExibida}
+          diasPrimeiroVencimento={diasPrimeiroVencimento}
+          avisoVencimento={avisoVencimentoUnico}
+          onChange={atualizarDado}
+        />
         <Juros dados={dados} onChange={atualizarDado} totalJuros={totalJuros} disabled={personalizacaoPendente} />
       </section>
 
@@ -815,28 +1052,38 @@ export default function Simulador() {
         <button className="button button-secondary" type="button" onClick={limparSimulacao}>
           Limpar
         </button>
-        <button className="button button-secondary print-button" type="button" onClick={abrirRelatorioPdf}>
+        <button className="button button-secondary print-button" type="button" onClick={abrirRelatorioPdf} disabled={!podeExportar}>
           Imprimir / Salvar como PDF
         </button>
-        <button className="button button-secondary" type="button" onClick={exportarParaExcel} disabled={parcelasParaAnalise.length === 0}>
+        <button className="button button-secondary" type="button" onClick={exportarParaExcel} disabled={!podeExportar}>
           Exportar para Excel
         </button>
-        <button className="button button-primary" type="button" onClick={calcular} disabled={calculando}>
+        <button className="button button-primary" type="button" onClick={calcular} disabled={calculando || temValorInvalido}>
           {calculando ? 'Calculando...' : 'Calcular'}
         </button>
       </div>
       {calculando && <p className="api-status" role="status">Calculando os valores no backend...</p>}
       {erroBackend && <p className="api-status api-status--error" role="alert">{erroBackend}</p>}
       {avisoImpressao && <p className="print-warning" role="status">{avisoImpressao}</p>}
+      <label className="print-option">
+        <input type="checkbox" checked={incluirGraficoPdf} onChange={(event) => setIncluirGraficoPdf(event.target.checked)} />
+        Incluir gráfico no PDF
+      </label>
 
       <section className="analysis-panel" aria-label="Personalização e gráfico das parcelas">
         <Personalizacao
           parcelas={parcelas}
+          limites={limitesParcelas}
+          errosValores={errosValores}
           onChange={atualizarParcela}
-          onToggleAll={atualizarTodasParcelas}
+          onValorEditadoBlur={calcularAposEdicao}
+          onRestaurarValor={restaurarValorParcela}
           onInsertAfter={inserirParcelaApos}
           onDelete={excluirParcela}
-          canAdd={parcelas.length < 380}
+          onInicializar={inicializarPersonalizacao}
+          podeInicializar={!calculando && dados.quantidadeParcelas > 0 && !!dados.dataSimulacao && !!dadosParaCalculo.primeiraDataVencimento}
+          canAdd={parcelas.length < MAX_PARCELAS && dados.quantidadeParcelas < MAX_PARCELAS && dados.periodicidade !== 'D'}
+          vencimentoUnico={dados.periodicidade === 'D'}
         />
         <Grafico parcelas={parcelasParaAnalise} />
       </section>

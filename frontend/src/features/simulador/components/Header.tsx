@@ -16,7 +16,7 @@ export default function Header({ tema, onTemaChange }: HeaderProps) {
       <a className="brand" href="/" aria-label="Voltar à página inicial">
         <span>SMX</span><span>Corp</span>
       </a>
-      <h1>Simulador financeiro</h1>
+      <h1>Plataforma de Modelagem Financeira</h1>
       <div className="user-info">
         <label className="theme-toggle">
           <span>Claro</span>

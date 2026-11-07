@@ -1,3 +1,23 @@
+export const MAX_PARCELAS = 380
+
+export const periodicidadesVencimento = {
+  M: 'Mensal',
+  B: 'Bimestral',
+  T: 'Trimestral',
+  A: 'Anual',
+  D: 'Vencimento único',
+} as const
+
+export type PeriodicidadeVencimento = keyof typeof periodicidadesVencimento
+
+export function isPeriodicidadeVencimento(valor: string): valor is PeriodicidadeVencimento {
+  return Object.prototype.hasOwnProperty.call(periodicidadesVencimento, valor)
+}
+
+export function mesesPorPeriodicidade(periodicidade: PeriodicidadeVencimento) {
+  return { M: 1, B: 2, T: 3, A: 12, D: 1 }[periodicidade]
+}
+
 export interface DadosSimulacao {
   sistemaAmortizacao: 'Price' | 'Price HP' | 'SAC' | 'Especial'
   modoValor: 'credito' | 'primeiraParcela'
@@ -9,10 +29,9 @@ export interface DadosSimulacao {
   dataSimulacao: string
   diaBaseVencimento: number
   primeiraDataVencimento: string
-  periodicidade: number
+  periodicidade: PeriodicidadeVencimento
   diasUteis: boolean
-  qtdeParcelasPrincipal: number
-  diasCarencia: number
+  periodosCarencia: number
   taxaJuros: number
   periodicidadeTaxa: 'M' | 'A'
   baseDias: 360
@@ -22,7 +41,18 @@ export interface AjusteParcela {
   dataVencimento?: string
   valorParcela?: number
   cobrarPrincipal?: boolean
-  alterada?: boolean
+  valorEditado?: boolean
+}
+
+export interface LimitesParcela {
+  juros: number
+  saldoRemanescente: number
+}
+
+export function validarValorParcela(valor: number, limites: LimitesParcela): boolean {
+  const centavos = Math.round(valor * 100)
+  return centavos >= Math.round(limites.juros * 100)
+    && centavos < Math.round(limites.saldoRemanescente * 100)
 }
 
 export interface Parcela {
@@ -39,18 +69,24 @@ export interface Parcela {
   saldoRemanescente: number
 }
 
-function dataLocal(data: Date) {
+export function dataLocal(data: Date) {
   const ano = data.getFullYear()
   const mes = String(data.getMonth() + 1).padStart(2, '0')
   const dia = String(data.getDate()).padStart(2, '0')
   return `${ano}-${mes}-${dia}`
 }
 
-function adicionarMeses(dataISO: string, meses: number) {
+export function adicionarDias(dataISO: string, dias: number) {
+  const [ano, mes, dia] = dataISO.split('-').map(Number)
+  const data = new Date(Date.UTC(ano, mes - 1, dia + dias))
+  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, '0')}-${String(data.getUTCDate()).padStart(2, '0')}`
+}
+
+function adicionarMeses(dataISO: string, meses: number, diaBase?: number) {
   const [ano, mes, dia] = dataISO.split('-').map(Number)
   const primeiroDia = new Date(ano, mes - 1 + meses, 1)
   const ultimoDia = new Date(primeiroDia.getFullYear(), primeiroDia.getMonth() + 1, 0).getDate()
-  primeiroDia.setDate(Math.min(dia, ultimoDia))
+  primeiroDia.setDate(Math.min(diaBase ?? dia, ultimoDia))
   return dataLocal(primeiroDia)
 }
 
@@ -75,12 +111,11 @@ export function criarDadosIniciais(): DadosSimulacao {
     valorFinanciamento: 30000,
     quantidadeParcelas: 36,
     dataSimulacao: dataLocal(hoje),
-    diaBaseVencimento: hoje.getDate(),
+    diaBaseVencimento: proximoVencimento.getDate(),
     primeiraDataVencimento: dataLocal(proximoVencimento),
-    periodicidade: 1,
+    periodicidade: 'M',
     diasUteis: false,
-    qtdeParcelasPrincipal: 36,
-    diasCarencia: 0,
+    periodosCarencia: 0,
     taxaJuros: 1,
     periodicidadeTaxa: 'M',
     baseDias: 360,
@@ -111,12 +146,11 @@ export function criarDadosZerados(): DadosSimulacao {
     valorFinanciamento: 0,
     quantidadeParcelas: 0,
     dataSimulacao,
-    diaBaseVencimento: hoje.getDate(),
+    diaBaseVencimento: primeiroVencimento.getDate(),
     primeiraDataVencimento: dataLocal(primeiroVencimento),
-    periodicidade: 1,
+    periodicidade: 'M',
     diasUteis: false,
-    qtdeParcelasPrincipal: 0,
-    diasCarencia: 0,
+    periodosCarencia: 0,
     taxaJuros: 0,
     periodicidadeTaxa: 'M',
     baseDias: 360,
@@ -129,9 +163,9 @@ export function taxaMensalBase360(dados: Pick<DadosSimulacao, 'taxaJuros' | 'per
 }
 
 export function gerarParcelas(dados: DadosSimulacao, ajustes: AjusteParcela[] = []): Parcela[] {
-  const quantidade = Math.max(1, Math.min(380, Math.floor(dados.quantidadeParcelas) || 1))
+  const quantidade = Math.max(1, Math.min(MAX_PARCELAS, Math.floor(dados.quantidadeParcelas) || 1))
   const taxaMensal = taxaMensalBase360(dados)
-  const mesesPorPeriodo = Math.max(1, dados.periodicidade)
+  const mesesPorPeriodo = mesesPorPeriodicidade(dados.periodicidade)
   const taxaPeriodo = Math.pow(1 + taxaMensal, mesesPorPeriodo) - 1
   const valorFinanciado = Math.max(0, dados.valorFinanciamento)
   const valorBase = taxaPeriodo === 0
@@ -143,11 +177,13 @@ export function gerarParcelas(dados: DadosSimulacao, ajustes: AjusteParcela[] = 
 
   return Array.from({ length: quantidade }, (_, indice) => {
     const ajuste = ajustes[indice]
-    const dataPadrao = adicionarMeses(dados.primeiraDataVencimento, indice * mesesPorPeriodo)
+    const dataPadrao = indice === 0
+      ? dados.primeiraDataVencimento
+      : adicionarMeses(dados.primeiraDataVencimento, indice * mesesPorPeriodo, dados.diaBaseVencimento)
     const dataVencimento = ajuste?.dataVencimento || dataPadrao
     const diasPeriodo = diferencaEmDias(dataAnterior, dataVencimento)
     const diasCorridos = diferencaEmDias(dados.dataSimulacao, dataVencimento)
-    const taxaDoPeriodo = dados.diasUteis
+    const taxaDoPeriodo = dados.diasUteis || dados.periodicidade === 'D'
       ? Math.pow(1 + taxaMensal, diasPeriodo / 30) - 1
       : taxaPeriodo
     const valorJuros = saldo * taxaDoPeriodo
