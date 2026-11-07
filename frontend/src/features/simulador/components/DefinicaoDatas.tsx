@@ -108,7 +108,7 @@ export default function DefinicaoDatas({ dados, disabled = false, onChange }: De
                 />
               </Campo>
               <Campo
-                label="Carência em qtde de dias"
+                label="Qtde de dias de carência"
                 htmlFor="dias-carencia"
               >
                 <input

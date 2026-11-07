@@ -67,6 +67,7 @@ export default function Personalizacao({
         <table className="custom-table">
           <thead>
             <tr>
+              <th className="installment-actions-column" scope="col">Ações</th>
               <th>Parcela</th>
               <th>Dt. vencimento</th>
               <th>Valor da parcela</th>
@@ -82,12 +83,40 @@ export default function Personalizacao({
                   <span>Principal</span>
                 </label>
               </th>
-              <th aria-label="Ações da parcela" />
             </tr>
           </thead>
           <tbody>
             {parcelas.map((parcela, indice) => (
               <tr key={`${parcela.numero}-${parcela.dataVencimento}`}>
+                <td className="installment-actions-column">
+                  <div className="installment-actions">
+                    {canAdd && (
+                      <button
+                        className="insert-installment"
+                        type="button"
+                        aria-label={`Inserir parcela após ${parcela.numero}`}
+                        title={existeDataEntre(parcela.dataVencimento, parcelas[indice + 1]?.dataVencimento)
+                          ? `Inserir parcela após ${parcela.numero}`
+                          : 'Não há uma data disponível entre os vencimentos'}
+                        disabled={!existeDataEntre(parcela.dataVencimento, parcelas[indice + 1]?.dataVencimento)}
+                        onClick={() => onInsertAfter(indice)}
+                      >
+                        +
+                      </button>
+                    )}
+                    {parcelas.length > 1 && (
+                      <button
+                        className="delete-installment"
+                        type="button"
+                        aria-label={`Excluir parcela ${parcela.numero}`}
+                        title={`Excluir parcela ${parcela.numero}`}
+                        onClick={() => onDelete(indice)}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </td>
                 <td>{parcela.numero}</td>
                 <td>
                   <input
@@ -118,33 +147,6 @@ export default function Personalizacao({
                     title={indice === parcelas.length - 1 ? 'Obrigatório na última parcela' : undefined}
                     onChange={(event) => onChange(indice, { cobrarPrincipal: event.target.checked })}
                   />
-                </td>
-                <td className="installment-actions">
-                  {canAdd && (
-                    <button
-                      className="insert-installment"
-                      type="button"
-                      aria-label={`Inserir parcela após ${parcela.numero}`}
-                      title={existeDataEntre(parcela.dataVencimento, parcelas[indice + 1]?.dataVencimento)
-                        ? `Inserir parcela após ${parcela.numero}`
-                        : 'Não há uma data disponível entre os vencimentos'}
-                      disabled={!existeDataEntre(parcela.dataVencimento, parcelas[indice + 1]?.dataVencimento)}
-                      onClick={() => onInsertAfter(indice)}
-                    >
-                      +
-                    </button>
-                  )}
-                  {parcelas.length > 1 && (
-                    <button
-                      className="delete-installment"
-                      type="button"
-                      aria-label={`Excluir parcela ${parcela.numero}`}
-                      title={`Excluir parcela ${parcela.numero}`}
-                      onClick={() => onDelete(indice)}
-                    >
-                      ×
-                    </button>
-                  )}
                 </td>
               </tr>
             ))}

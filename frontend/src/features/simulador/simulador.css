@@ -612,6 +612,7 @@
 
 .custom-table {
   table-layout: fixed;
+  min-width: 360px;
   font-size: 11px;
 }
 
@@ -626,23 +627,23 @@
 }
 
 .custom-table th:nth-child(1) {
-  width: 14%;
+  width: 16%;
 }
 
 .custom-table th:nth-child(2) {
-  width: 32%;
+  width: 11%;
 }
 
 .custom-table th:nth-child(3) {
-  width: 31%;
+  width: 29%;
 }
 
 .custom-table th:nth-child(4) {
-  width: 15%;
+  width: 27%;
 }
 
 .custom-table th:nth-child(5) {
-  width: 8%;
+  width: 17%;
 }
 
 .principal-header {
@@ -661,14 +662,28 @@
   font-size: 12px;
 }
 
-.custom-table td:first-child {
+.custom-table td:nth-child(2) {
   text-align: center;
+}
+
+@media screen {
+  .custom-table .installment-actions-column {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--surface);
+  }
+}
+
+.custom-table th.installment-actions-column,
+.custom-table td.installment-actions-column {
+  padding-inline: 2px;
 }
 
 .installment-actions {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 3px;
 }
 
@@ -718,12 +733,6 @@
 .delete-installment:focus-visible {
   outline: 2px solid #b42318;
   outline-offset: 2px;
-}
-
-.custom-table th:nth-child(5),
-.custom-table td:nth-child(5) {
-  padding-inline: 2px;
-  text-align: center;
 }
 
 .custom-table input[type='date'],
@@ -1065,6 +1074,10 @@
 
   .custom-table thead {
     display: table-header-group;
+  }
+
+  .custom-table {
+    min-width: 0;
   }
 
   .custom-table th {

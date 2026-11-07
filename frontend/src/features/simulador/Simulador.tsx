@@ -220,9 +220,10 @@ export default function Simulador() {
   function atualizarDado<K extends keyof DadosSimulacao>(campo: K, valor: DadosSimulacao[K]) {
     // Alterar uma entrada após o cálculo invalida resultado, gráfico e fluxo de vencimentos.
     const havia = resultadoSimulacao !== null
+    const estavaNoFluxoEspecial = dados.sistemaAmortizacao === 'Especial'
     if (havia) setResultadoDescartado(true)
 
-    if (campo === 'qtdeParcelasPrincipal' && typeof valor === 'number') {
+    if (campo === 'qtdeParcelasPrincipal' && typeof valor === 'number' && !estavaNoFluxoEspecial) {
       const quantidadeValida = Math.max(1, Math.min(dados.quantidadeParcelas, Math.floor(valor) || 1))
       const primeirosIndiceDesmarcado = Math.max(0, parcelas.length - quantidadeValida)
       const novosAjustes = parcelas.map((parcela, indice) => ({
@@ -250,7 +251,10 @@ export default function Simulador() {
       return
     }
 
-    if (campo === 'sistemaAmortizacao') {
+    if (estavaNoFluxoEspecial) {
+      sistemaAmortizacaoAntesPersonalizacao.current = 'Price'
+      setAjustes([])
+    } else if (campo === 'sistemaAmortizacao') {
       sistemaAmortizacaoAntesPersonalizacao.current = valor as DadosSimulacao['sistemaAmortizacao']
       setAjustes((atuais) => Array.from({ length: parcelas.length }, (_, indice) => ({
         ...atuais[indice],
@@ -278,7 +282,11 @@ export default function Simulador() {
         atualizados.qtdeParcelasPrincipal = Math.max(0, Math.min(380, Math.floor(valor) || 0))
       }
 
-      if (campo === 'sistemaAmortizacao' && valor === 'Price HP') {
+      if (campo === 'qtdeParcelasPrincipal' && typeof valor === 'number' && estavaNoFluxoEspecial) {
+        atualizados.qtdeParcelasPrincipal = Math.max(1, Math.min(atuais.quantidadeParcelas, Math.floor(valor) || 1))
+      }
+
+      if (!estavaNoFluxoEspecial && campo === 'sistemaAmortizacao' && valor === 'Price HP') {
         atualizados.diasUteis = false
         atualizados.primeiraDataVencimento = proximoMes(atuais.dataSimulacao)
       }
@@ -303,6 +311,11 @@ export default function Simulador() {
       if (havia) {
         atualizados.valorFinanciamento = 0
         if (atualizados.modoValor === 'primeiraParcela') atualizados.valorCredito = 0
+      }
+
+      if (estavaNoFluxoEspecial) {
+        atualizados.sistemaAmortizacao = 'Price'
+        atualizados.diasCarencia = 0
       }
 
       return atualizados
@@ -776,6 +789,8 @@ export default function Simulador() {
 
     raizPdf.append(relatorioPdf)
     documentoPdf.body.replaceChildren(raizPdf)
+
+    abaPdf.addEventListener('afterprint', () => abaPdf.close(), { once: true })
 
     abaPdf.requestAnimationFrame(() => {
       abaPdf.requestAnimationFrame(() => {

@@ -113,8 +113,11 @@ async function requisitar<T>(
   opcoes: RequestInit,
   validar: (resposta: unknown) => resposta is T,
 ): Promise<T> {
+  console.log("VITE_API_BASE_URL =", import.meta.env.VITE_API_BASE_URL)
+  console.log("MODE =", import.meta.env.MODE)
   const baseUrl = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
   const resposta = await fetch(`${baseUrl}${rota}`, opcoes)
+
   const conteudo: unknown = await resposta.json()
 
   if (!resposta.ok) {
