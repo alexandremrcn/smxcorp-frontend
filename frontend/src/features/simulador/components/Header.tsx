@@ -30,7 +30,7 @@ export default function Header({ tema, onTemaChange }: HeaderProps) {
           <span className="theme-toggle-track" aria-hidden="true"><span /></span>
           <span>Escuro</span>
         </label>
-        <strong>Alexandre Marcon</strong>
+        <strong>AM</strong>
         <span>{dataAtual}</span>
       </div>
     </header>
