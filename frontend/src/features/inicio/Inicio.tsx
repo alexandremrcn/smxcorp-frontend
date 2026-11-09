@@ -221,7 +221,7 @@ export default function Inicio() {
           </div>
           <div className="access-plan-summary">
             <strong>{valorPlano} via Pix</strong>
-            <span>{PLANO_ACESSO.duracaoDias} dias de acesso após confirmação do pagamento</span>
+            <span>{PLANO_ACESSO.duracaoDias} dias de acesso após confirmação do pagamento (liberado temporariamente)</span>
           </div>
           <form className="login-form" onSubmit={enviarAcesso}>
             {modoAcesso === 'cadastro' && (
