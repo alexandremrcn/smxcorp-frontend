@@ -1048,8 +1048,22 @@ export default function Simulador() {
   }
 
   return (
-    <main className="simulator">
+    <main className="simulator relative min-h-screen">
       <Header tema={tema} onTemaChange={setTema} />
+
+      <section className="mb-6 mt-5 flex flex-col gap-5 rounded-[1.75rem] bg-gradient-to-br from-slate-950 via-slate-900 to-teal-900 p-6 text-white shadow-xl md:flex-row md:items-end md:justify-between md:p-8" aria-labelledby="simulator-welcome-title">
+        <div className="max-w-2xl">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-teal-300">SIMULADOR DE CRÉDITO · SMX CORP</p>
+          <h2 className="text-3xl font-semibold tracking-tight md:text-4xl" id="simulator-welcome-title">Modele cada detalhe da sua operação.</h2>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
+            Ajuste valores, taxas e vencimentos para entender o custo e o fluxo das parcelas antes de tomar uma decisão.
+          </p>
+        </div>
+        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-slate-100">
+          <span className="size-2 rounded-full bg-teal-300" aria-hidden="true" />
+          Simulação para planejamento
+        </div>
+      </section>
 
       <section className="input-grid" aria-label="Dados da simulação">
         <ValorPrazo dados={dados} valorIof={resultadoSimulacao?.vlIof} disabled={personalizacaoPendente} onChange={atualizarDado} />

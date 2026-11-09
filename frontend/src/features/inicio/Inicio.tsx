@@ -56,7 +56,7 @@ export default function Inicio() {
   }
 
   return (
-    <main className="home-page">
+    <main className="home-page min-h-screen bg-slate-50 text-slate-900">
       <header className="home-header">
         <a className="brand home-brand" href="/" aria-label="SMX Corp, página inicial">
           <span>SMX</span><span>Corp</span>
@@ -69,7 +69,7 @@ export default function Inicio() {
         </nav>
       </header>
 
-      <section className="home-hero" aria-labelledby="home-title">
+      <section className="home-hero relative isolate overflow-hidden rounded-[2rem]" aria-labelledby="home-title">
         <div className="home-hero-copy">
           <p className="home-eyebrow">SMX CORP · SIMULADOR DE CRÉDITO</p>
           <h1 id="home-title">Crédito com números mais claros.</h1>
@@ -115,7 +115,7 @@ export default function Inicio() {
           <h2>Mais do que estimar uma parcela: modele o seu fluxo.</h2>
           <p>Combine os dados da operação com datas e valores personalizados para enxergar o cenário com mais contexto.</p>
         </div>
-        <div className="home-simulator-grid">
+        <div className="home-simulator-grid grid grid-cols-1 gap-4 lg:grid-cols-3">
           <article>
             <span className="home-detail-index">01 / VOCÊ INFORMA</span>
             <h3>Os dados da operação</h3>
@@ -157,7 +157,7 @@ export default function Inicio() {
           <h2>Compare propostas pelo custo total.</h2>
           <p>Taxas e condições variam por modalidade, instituição e perfil. Para uma comparação útil, mantenha o mesmo valor e prazo.</p>
         </div>
-        <div className="home-credit-grid">
+        <div className="home-credit-grid grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           <article>
             <span className="home-detail-index">CET</span>
             <h3>Não olhe só a taxa</h3>
@@ -179,7 +179,7 @@ export default function Inicio() {
         <p className="home-product-disclaimer">As informações de mercado são referências agregadas, não ofertas individuais. A simulação não representa aprovação de crédito.</p>
       </section>
 
-      <section className="home-pricing" id="investimento">
+      <section className="home-pricing rounded-[1.5rem] shadow-xl" id="investimento">
         <div>
           <p className="home-eyebrow">PLANO DE ACESSO</p>
           <h2>Simule seus cenários com mais clareza.</h2>
