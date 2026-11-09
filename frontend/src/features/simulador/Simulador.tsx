@@ -968,8 +968,19 @@ export default function Simulador() {
     metaViewport.content = 'width=device-width, initial-scale=1.0'
     documentoPdf.head.append(metaViewport)
 
-    document.head.querySelectorAll('style, link[rel="stylesheet"]').forEach((estilo) => {
-      documentoPdf.head.append(estilo.cloneNode(true))
+    const carregamentosEstilo: Promise<void>[] = []
+    document.head.querySelectorAll<HTMLStyleElement | HTMLLinkElement>('style, link[rel="stylesheet"]').forEach((estilo) => {
+      if (estilo instanceof HTMLLinkElement) {
+        const copia = estilo.cloneNode(true) as HTMLLinkElement
+        copia.href = estilo.href
+        carregamentosEstilo.push(new Promise((resolve, reject) => {
+          copia.addEventListener('load', () => resolve(), { once: true })
+          copia.addEventListener('error', () => reject(new Error('Não foi possível carregar os estilos do relatório.')), { once: true })
+        }))
+        documentoPdf.head.append(copia)
+      } else {
+        documentoPdf.head.append(estilo.cloneNode(true))
+      }
     })
 
     const estiloPaginas = documentoPdf.createElement('style')
@@ -1022,12 +1033,17 @@ export default function Simulador() {
 
     abaPdf.addEventListener('afterprint', () => abaPdf.close(), { once: true })
 
-    abaPdf.requestAnimationFrame(() => {
+    void Promise.all(carregamentosEstilo).then(() => {
       abaPdf.requestAnimationFrame(() => {
-        if (abaPdf.closed) return
-        abaPdf.focus()
-        abaPdf.print()
+        abaPdf.requestAnimationFrame(() => {
+          if (abaPdf.closed) return
+          abaPdf.focus()
+          abaPdf.print()
+        })
       })
+    }).catch((erro: unknown) => {
+      abaPdf.close()
+      setAvisoImpressao(erro instanceof Error ? erro.message : 'Não foi possível preparar o relatório para impressão.')
     })
   }
 
