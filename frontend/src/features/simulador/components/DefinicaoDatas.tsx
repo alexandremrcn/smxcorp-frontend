@@ -60,16 +60,6 @@ export default function DefinicaoDatas({ dados, disabled = false, primeiroVencim
               onChange={(event) => onChange('dataSimulacao', event.target.value)}
             />
           </Campo>
-          <Campo label="Periodicidade de vencimento" htmlFor="periodicidade">
-            <select id="periodicidade" value={dados.periodicidade} onChange={(event) => {
-              const valor = event.target.value
-              if (isPeriodicidadeVencimento(valor)) onChange('periodicidade', valor)
-            }}>
-              {Object.entries(periodicidadesVencimento).map(([codigo, descricao]) => (
-                <option key={codigo} value={codigo}>{descricao}</option>
-              ))}
-            </select>
-          </Campo>
           <div className="first-due-date" role="group" aria-labelledby="primeiro-vencimento-label">
             <span className="first-due-date-title" id="primeiro-vencimento-label">Vencimento 1ª parcela</span>
             <div className="single-due-date">
@@ -123,6 +113,16 @@ export default function DefinicaoDatas({ dados, disabled = false, primeiroVencim
             {avisoVencimento && <p className="single-due-date-status" role="status">{avisoVencimento}</p>}
             {avisoLimiteData?.dataSimulacao === dados.dataSimulacao && <p className="single-due-date-status" role="status">A data deve estar entre 1 e 3650 dias após a simulação.</p>}
           </div>
+          <Campo label="Periodicidade de vencimento" htmlFor="periodicidade">
+            <select id="periodicidade" value={dados.periodicidade} onChange={(event) => {
+              const valor = event.target.value
+              if (isPeriodicidadeVencimento(valor)) onChange('periodicidade', valor)
+            }}>
+              {Object.entries(periodicidadesVencimento).map(([codigo, descricao]) => (
+                <option key={codigo} value={codigo}>{descricao}</option>
+              ))}
+            </select>
+          </Campo>
           {dados.periodicidade !== 'D' && <Campo label="Dia base de vencimento" htmlFor="dia-base">
             <input
               id="dia-base"

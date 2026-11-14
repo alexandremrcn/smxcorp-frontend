@@ -220,6 +220,17 @@
  text-align: right;
 }
 
+.dates-fields .dates-fields-main .field-row[for='data-simulacao'] {
+  grid-template-columns: minmax(100px, 1fr) minmax(110px, 0.9fr);
+}
+
+.dates-fields .dates-fields-main .field-row[for='data-simulacao'] input[type='date'],
+.dates-fields .single-due-date input[type='date'] {
+  width: 110px;
+  max-width: 100%;
+  justify-self: end;
+}
+
 .field-list:has(.field-row--toggle) {
   border-color: var(--divider);
 }
