@@ -172,7 +172,7 @@
 .dates-fields-main {
   display: grid;
   align-content: start;
-  gap: 4px;
+  gap: 9px;
 }
 
 .first-due-date {
@@ -184,7 +184,7 @@
 
 .first-due-date-title {
   color: var(--navy);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .single-due-date {
@@ -195,7 +195,6 @@
 }
 
 .dates-fields .single-due-date input {
-  height: 21px;
   text-align: right;
 }
 
@@ -204,15 +203,6 @@
   margin: 0;
   color: var(--muted);
   font-size: 11px;
-}
-
-.dates-fields .field-row {
-  min-height: 21px;
-}
-
-.dates-fields .field-row input,
-.dates-fields .field-row select {
-  height: 21px;
 }
 
 .dates-fields .dates-fields-main .field-row input,

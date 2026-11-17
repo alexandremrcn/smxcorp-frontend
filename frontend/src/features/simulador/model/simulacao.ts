@@ -52,7 +52,7 @@ export interface LimitesParcela {
 export function validarValorParcela(valor: number, limites: LimitesParcela): boolean {
   const centavos = Math.round(valor * 100)
   return centavos >= Math.round(limites.juros * 100)
-    && centavos < Math.round(limites.saldoRemanescente * 100)
+    && centavos <= Math.round(limites.saldoRemanescente * 100)
 }
 
 export interface Parcela {
@@ -82,7 +82,7 @@ export function adicionarDias(dataISO: string, dias: number) {
   return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, '0')}-${String(data.getUTCDate()).padStart(2, '0')}`
 }
 
-function adicionarMeses(dataISO: string, meses: number, diaBase?: number) {
+export function adicionarMeses(dataISO: string, meses: number, diaBase?: number) {
   const [ano, mes, dia] = dataISO.split('-').map(Number)
   const primeiroDia = new Date(ano, mes - 1 + meses, 1)
   const ultimoDia = new Date(primeiroDia.getFullYear(), primeiroDia.getMonth() + 1, 0).getDate()

@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { formatarMoeda, type AjusteParcela, type LimitesParcela, type Parcela } from '../model/simulacao'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
@@ -35,6 +35,7 @@ function existeDataEntre(dataInicial: string, dataFinal?: string) {
 interface PersonalizacaoProps {
   parcelas: Parcela[]
   limites: (LimitesParcela | null)[]
+  limiteUltimoVencimento: string | null
   errosValores: (string | null)[]
   onChange: (indice: number, ajuste: AjusteParcela) => void
   onValorEditadoBlur: () => void
@@ -42,6 +43,7 @@ interface PersonalizacaoProps {
   onInsertAfter: (indice: number) => void
   onDelete: (indice: number) => void
   onInicializar: () => void
+  disabled: boolean
   podeInicializar: boolean
   canAdd: boolean
   vencimentoUnico: boolean
@@ -50,6 +52,7 @@ interface PersonalizacaoProps {
 export default function Personalizacao({
   parcelas,
   limites,
+  limiteUltimoVencimento,
   errosValores,
   onChange,
   onValorEditadoBlur,
@@ -57,17 +60,20 @@ export default function Personalizacao({
   onInsertAfter,
   onDelete,
   onInicializar,
+  disabled,
   podeInicializar,
   canAdd,
   vencimentoUnico,
 }: PersonalizacaoProps) {
   const valorAlteradoEmFoco = useRef(false)
+  const [erroData, setErroData] = useState('')
+  const limiteFormatado = limiteUltimoVencimento?.split('-').reverse().join('/')
 
   return (
     <section className="subpanel customization-panel">
       <div className="customization-header">
         <h2>Personalize sua simulação: vencimentos e valores</h2>
-        <button className="button button-secondary" type="button" onClick={onInicializar} disabled={!podeInicializar}>
+        <button className="button button-secondary" type="button" onClick={() => { setErroData(''); onInicializar() }} disabled={disabled || !podeInicializar}>
           Inicializar
         </button>
       </div>
@@ -92,11 +98,14 @@ export default function Personalizacao({
                         className="insert-installment"
                         type="button"
                         aria-label={`Inserir parcela após ${parcela.numero}`}
-                        title={existeDataEntre(parcela.dataVencimento, parcelas[indice + 1]?.dataVencimento)
-                          ? `Inserir parcela após ${parcela.numero}`
-                          : 'Não há uma data disponível entre os vencimentos'}
-                        disabled={!existeDataEntre(parcela.dataVencimento, parcelas[indice + 1]?.dataVencimento)}
-                        onClick={() => onInsertAfter(indice)}
+                        title={!parcelas[indice + 1] && limiteUltimoVencimento && parcela.dataVencimento >= limiteUltimoVencimento
+                          ? 'Não há data disponível antes do limite da última parcela.'
+                          : existeDataEntre(parcela.dataVencimento, parcelas[indice + 1]?.dataVencimento)
+                            ? `Inserir parcela após ${parcela.numero}`
+                            : 'Não há uma data disponível entre os vencimentos'}
+                        disabled={disabled || !existeDataEntre(parcela.dataVencimento, parcelas[indice + 1]?.dataVencimento)
+                          || (!parcelas[indice + 1] && !!limiteUltimoVencimento && parcela.dataVencimento >= limiteUltimoVencimento)}
+                        onClick={() => { setErroData(''); onInsertAfter(indice) }}
                       >
                         +
                       </button>
@@ -107,7 +116,8 @@ export default function Personalizacao({
                         type="button"
                         aria-label={`Excluir parcela ${parcela.numero}`}
                         title={`Excluir parcela ${parcela.numero}`}
-                        onClick={() => onDelete(indice)}
+                        disabled={disabled}
+                        onClick={() => { setErroData(''); onDelete(indice) }}
                       >
                         ×
                       </button>
@@ -120,12 +130,30 @@ export default function Personalizacao({
                     aria-label={`Vencimento da parcela ${parcela.numero}`}
                     type="date"
                     value={parcela.dataVencimento}
+                    disabled={disabled}
                     readOnly={vencimentoUnico}
-                    title={vencimentoUnico ? 'Altere a data na configuração de vencimento único.' : undefined}
+                    title={vencimentoUnico
+                      ? 'Altere a data na configuração de vencimento único.'
+                      : indice === parcelas.length - 1 && limiteFormatado
+                        ? `Data máxima: ${limiteFormatado} (dois meses após o último vencimento inicial).`
+                        : undefined}
                     min={deslocarData(parcelas[indice - 1]?.dataVencimento, 1)}
-                    max={deslocarData(parcelas[indice + 1]?.dataVencimento, -1)}
-                    onChange={(event) => onChange(indice, { dataVencimento: event.target.value })}
+                    max={deslocarData(parcelas[indice + 1]?.dataVencimento, -1) ?? limiteUltimoVencimento ?? undefined}
+                    aria-invalid={indice === parcelas.length - 1 && !!erroData && !!limiteUltimoVencimento}
+                    aria-describedby={indice === parcelas.length - 1 && erroData && limiteUltimoVencimento ? 'erro-data-ultima-parcela' : undefined}
+                    onChange={(event) => {
+                      const dataVencimento = event.target.value
+                      if (indice === parcelas.length - 1 && limiteUltimoVencimento && dataVencimento > limiteUltimoVencimento) {
+                        setErroData(`A última parcela não pode vencer após ${limiteFormatado}.`)
+                        return
+                      }
+                      setErroData('')
+                      onChange(indice, { dataVencimento })
+                    }}
                   />
+                  {indice === parcelas.length - 1 && erroData && limiteUltimoVencimento && (
+                    <span className="installment-error" id="erro-data-ultima-parcela" role="alert">{erroData}</span>
+                  )}
                 </td>
                 <td>
                   <input
@@ -133,14 +161,14 @@ export default function Personalizacao({
                     type="text"
                     inputMode="numeric"
                     value={formatarValorParcela(parcela.valorParcela)}
-                    disabled={indice === parcelas.length - 1 || !parcela.cobrarPrincipal || vencimentoUnico || !limites[indice]}
+                    disabled={disabled || indice === parcelas.length - 1 || !parcela.cobrarPrincipal || vencimentoUnico || !limites[indice]}
                     title={vencimentoUnico
                       ? 'O valor da parcela é calculado pelo sistema Price.'
                       : indice === parcelas.length - 1
                         ? 'O valor da última parcela é calculado automaticamente.'
                         : !limites[indice]
                           ? 'Calcule a simulação para obter juros e saldo de referência desta parcela.'
-                          : `Último cálculo: juros ${formatarMoeda(limites[indice].juros)}; saldo remanescente ${formatarMoeda(limites[indice].saldoRemanescente)}.`}
+                          : `Último cálculo: juros ${formatarMoeda(limites[indice].juros)}; limite superior (saldo remanescente) ${formatarMoeda(limites[indice].saldoRemanescente)}.`}
                     aria-invalid={!!errosValores[indice]}
                     aria-describedby={errosValores[indice] ? `erro-valor-parcela-${parcela.numero}` : undefined}
                     onFocus={() => { valorAlteradoEmFoco.current = false }}
@@ -160,7 +188,7 @@ export default function Personalizacao({
                     </span>
                   )}
                   {errosValores[indice] && (
-                    <button className="restore-installment-value" type="button" onClick={() => onRestaurarValor(indice)}>
+                    <button className="restore-installment-value" type="button" disabled={disabled} onClick={() => onRestaurarValor(indice)}>
                       Restaurar valor automático
                     </button>
                   )}

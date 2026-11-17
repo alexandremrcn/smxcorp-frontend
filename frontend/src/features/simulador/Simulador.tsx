@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import Header from './components/Header.tsx'
 import ValorPrazo from './components/ValorPrazo'
 import DefinicaoDatas from './components/DefinicaoDatas'
@@ -8,6 +8,7 @@ import Grafico from './components/Grafico'
 import Resultado from './components/Resultado'
 import {
   MAX_PARCELAS,
+  adicionarMeses,
   criarDadosZerados,
   formatarMoeda,
   gerarParcelas,
@@ -34,10 +35,6 @@ import {
 import './simulador.css'
 
 type Tema = 'claro' | 'escuro'
-type ConfiguracaoAntesPersonalizacao = Pick<
-  DadosSimulacao,
-  'quantidadeParcelas' | 'primeiraDataVencimento' | 'diaBaseVencimento' | 'sistemaAmortizacao'
->
 
 function sistemaAmortizacaoBackend(sistema: DadosSimulacao['sistemaAmortizacao']) {
   const codigos = {
@@ -180,6 +177,14 @@ function contarPeriodosCarencia(cobrancasPrincipal: boolean[]) {
   return primeiroPrincipal < 0 ? cobrancasPrincipal.length : primeiroPrincipal
 }
 
+function limparValorEditado(ajuste: AjusteParcela | undefined): AjusteParcela {
+  return {
+    ...ajuste,
+    ...(ajuste?.valorEditado ? { valorParcela: undefined } : {}),
+    valorEditado: false,
+  }
+}
+
 function parcelasDaSimulacao(resultado: ResultadoSimulacao): Parcela[] {
   let dataAnterior = dataBackendParaISO(resultado.dtReferencia)
 
@@ -210,6 +215,7 @@ export default function Simulador() {
   const [dados, setDados] = useState<DadosSimulacao>(criarDadosZerados)
   const [ajustes, setAjustes] = useState<AjusteParcela[]>([])
   const [limitesParcelas, setLimitesParcelas] = useState<(LimitesParcela | null)[]>([])
+  const [limiteUltimoVencimento, setLimiteUltimoVencimento] = useState<string | null>(null)
   const [avisoImpressao, setAvisoImpressao] = useState('')
   const [incluirGraficoPdf, setIncluirGraficoPdf] = useState(true)
   const [resultadoSimulacao, setResultadoSimulacao] = useState<ResultadoSimulacao | null>(null)
@@ -217,11 +223,14 @@ export default function Simulador() {
   const [erroBackend, setErroBackend] = useState('')
   const [resultadoDescartado, setResultadoDescartado] = useState(false)
   const [personalizacaoPendente, setPersonalizacaoPendente] = useState(false)
+  const [entradasAlteradas, setEntradasAlteradas] = useState(false)
+  const [solicitacaoRecalculo, setSolicitacaoRecalculo] = useState(0)
   const [vencimentoAjustado, setVencimentoAjustado] = useState<{ chave: string; data?: string; erro?: string } | null>(null)
   const calculoAtual = useRef(0)
   const calculoAposEdicao = useRef<number | null>(null)
+  const ultimaSolicitacaoRecalculo = useRef(0)
   const sistemaAmortizacaoAntesPersonalizacao = useRef<DadosSimulacao['sistemaAmortizacao']>('Price')
-  const configuracaoAntesPersonalizacao = useRef<ConfiguracaoAntesPersonalizacao | null>(null)
+  const configuracaoAntesPersonalizacao = useRef<DadosSimulacao | null>(null)
   const dataInformada = dados.primeiraDataVencimento
   const chaveVencimento = `${dados.sistemaAmortizacao}|${dados.periodicidade}|${dados.dataSimulacao}|${dataInformada}`
   const precisaAjustar = !!dados.dataSimulacao && !!dataInformada && (
@@ -244,17 +253,17 @@ export default function Simulador() {
     : resultadoSimulacao
       ? parcelasDaSimulacao(resultadoSimulacao)
       : parcelasEmPrevia
-  const parcelasParaAnalise = personalizacaoPendente ? [] : parcelas
+  const parcelasParaAnalise = personalizacaoPendente || entradasAlteradas ? [] : parcelas
   const errosValores = parcelas.map((parcela, indice) => {
     const ajuste = ajustes[indice]
     if (resultadoSimulacao || !parcela.cobrarPrincipal || !ajuste?.valorEditado || ajuste.valorParcela === undefined) return null
     const limites = limitesParcelas[indice]
     if (!limites) return 'Calcule a simulação para obter os limites desta parcela.'
     if (validarValorParcela(ajuste.valorParcela, limites)) return null
-    return `Informe valor igual ou superior aos juros (${formatarMoeda(limites.juros)}) e menor que o saldo remanescente (${formatarMoeda(limites.saldoRemanescente)}) do último cálculo.`
+    return `Informe valor igual ou superior aos juros (${formatarMoeda(limites.juros)}) e igual ou inferior ao saldo remanescente da parcela (${formatarMoeda(limites.saldoRemanescente)}) no último cálculo.`
   })
   const temValorInvalido = errosValores.some(Boolean)
-  const totalJuros = parcelas.reduce((total, parcela) => total + parcela.valorJuros, 0)
+  const totalJuros = parcelasParaAnalise.reduce((total, parcela) => total + parcela.valorJuros, 0)
   const podeExportar = resultadoSimulacao !== null && !calculando && !personalizacaoPendente && !erroBackend
 
   useEffect(() => {
@@ -306,17 +315,35 @@ export default function Simulador() {
 
   function atualizarDado<K extends keyof DadosSimulacao>(campo: K, valor: DadosSimulacao[K]) {
     if (dados.periodicidade === 'D' && (campo === 'sistemaAmortizacao' || campo === 'periodosCarencia')) return
+    setLimiteUltimoVencimento(null)
+    setEntradasAlteradas(true)
+    setAjustes((atuais) => atuais.map(limparValorEditado))
     // Alterar uma entrada após o cálculo invalida resultado, gráfico e fluxo de vencimentos.
     const havia = resultadoSimulacao !== null
-    const estavaNoFluxoEspecial = dados.sistemaAmortizacao === 'Especial'
     if (havia) setResultadoDescartado(true)
 
+    if (campo === 'taxaJuros' || campo === 'periodicidadeTaxa') {
+      setLimitesParcelas([])
+      calculoAtual.current += 1
+      setResultadoSimulacao(null)
+      setCalculando(false)
+      setErroBackend('')
+      setDados((atuais) => ({ ...atuais, [campo]: valor }))
+      return
+    }
+
+    const estavaNoFluxoEspecial = dados.sistemaAmortizacao === 'Especial'
+
     if (campo === 'periodosCarencia' && typeof valor === 'number') {
-      guardarConfiguracaoAntesPersonalizacao()
       const quantidadeValida = Math.max(0, Math.min(dados.quantidadeParcelas - 1, Math.floor(valor) || 0))
+      configuracaoAntesPersonalizacao.current = {
+        ...dados,
+        periodosCarencia: quantidadeValida,
+        sistemaAmortizacao: 'Especial',
+      }
       const parcelasAtuais = parcelas.length ? parcelas : parcelasEmPrevia
       const novosAjustes = parcelasAtuais.map((_, indice) => ({
-        ...ajustes[indice],
+        ...limparValorEditado(ajustes[indice]),
         cobrarPrincipal: indice >= quantidadeValida,
       }))
 
@@ -437,14 +464,20 @@ export default function Simulador() {
     })
   }
 
+  function invalidarPorEdicaoTemporaria() {
+    setLimiteUltimoVencimento(null)
+    setEntradasAlteradas(true)
+    setAjustes((atuais) => atuais.map(limparValorEditado))
+    calculoAtual.current += 1
+    setResultadoSimulacao(null)
+    setResultadoDescartado(true)
+    setCalculando(false)
+    setErroBackend('')
+  }
+
   function guardarConfiguracaoAntesPersonalizacao() {
     if (configuracaoAntesPersonalizacao.current) return
-    configuracaoAntesPersonalizacao.current = {
-      quantidadeParcelas: dados.quantidadeParcelas,
-      primeiraDataVencimento: dados.primeiraDataVencimento,
-      diaBaseVencimento: dados.diaBaseVencimento,
-      sistemaAmortizacao: dados.sistemaAmortizacao,
-    }
+    configuracaoAntesPersonalizacao.current = { ...dados }
   }
 
   function atualizarParcela(indice: number, ajuste: AjusteParcela) {
@@ -457,6 +490,7 @@ export default function Simulador() {
         !ajuste.dataVencimento
         || (dataAnterior && ajuste.dataVencimento <= dataAnterior)
         || (proximaData && ajuste.dataVencimento >= proximaData)
+        || (!proximaData && limiteUltimoVencimento && ajuste.dataVencimento > limiteUltimoVencimento)
       ) {
         return
       }
@@ -504,22 +538,24 @@ export default function Simulador() {
 
   function inserirParcelaApos(indice: number) {
     if (parcelas.length >= MAX_PARCELAS || dados.quantidadeParcelas >= MAX_PARCELAS || dados.periodicidade === 'D') return
-    calculoAtual.current += 1
-    setResultadoSimulacao(null)
-    setCalculando(false)
-    setErroBackend('')
-
-    const novaData = sugerirDataVencimento(
+    const dataSugerida = sugerirDataVencimento(
       parcelas[indice].dataVencimento,
       parcelas[indice + 1]?.dataVencimento,
       mesesPorPeriodicidade(dados.periodicidade),
     )
+    const novaData = !parcelas[indice + 1] && limiteUltimoVencimento && dataSugerida > limiteUltimoVencimento
+      ? limiteUltimoVencimento
+      : dataSugerida
     if (
       novaData <= parcelas[indice].dataVencimento
       || (parcelas[indice + 1] && novaData >= parcelas[indice + 1].dataVencimento)
     ) {
       return
     }
+    calculoAtual.current += 1
+    setResultadoSimulacao(null)
+    setCalculando(false)
+    setErroBackend('')
     guardarConfiguracaoAntesPersonalizacao()
     setPersonalizacaoPendente(true)
     const novosAjustes = parcelas.map((parcela, indiceParcela) => ({
@@ -601,13 +637,19 @@ export default function Simulador() {
   }
 
   function inicializarPersonalizacao() {
-    const configuracao = configuracaoAntesPersonalizacao.current
+    const configuracaoSalva = configuracaoAntesPersonalizacao.current
+    const configuracao = configuracaoSalva ?? dados
     configuracaoAntesPersonalizacao.current = null
-    if (configuracao && configuracao.sistemaAmortizacao !== 'Especial') {
+    if (configuracao.sistemaAmortizacao !== 'Especial') {
       sistemaAmortizacaoAntesPersonalizacao.current = configuracao.sistemaAmortizacao
     }
     calculoAtual.current += 1
-    setAjustes([])
+    setLimiteUltimoVencimento(null)
+    setAjustes(configuracao.periodosCarencia > 0
+      ? Array.from({ length: configuracao.quantidadeParcelas }, (_, indice) => ({
+          cobrarPrincipal: indice >= configuracao.periodosCarencia,
+        }))
+      : [])
     setLimitesParcelas([])
     setResultadoSimulacao(null)
     setResultadoDescartado(false)
@@ -615,15 +657,14 @@ export default function Simulador() {
     setCalculando(false)
     setErroBackend('')
     setAvisoImpressao('')
-    setDados((atuais) => {
-      const restaurados = { ...atuais, ...configuracao }
-      return {
-        ...restaurados,
-        periodosCarencia: 0,
-        valorFinanciamento: 0,
-        valorCredito: restaurados.modoValor === 'primeiraParcela' ? 0 : restaurados.valorCredito,
-      }
-    })
+    if (configuracaoSalva) {
+      setDados((atuais) => ({
+        ...configuracaoSalva,
+        taxaJuros: atuais.taxaJuros,
+        periodicidadeTaxa: atuais.periodicidadeTaxa,
+      }))
+    }
+    setSolicitacaoRecalculo((atual) => atual + 1)
   }
 
   function limparSimulacao() {
@@ -631,9 +672,11 @@ export default function Simulador() {
     configuracaoAntesPersonalizacao.current = null
     sistemaAmortizacaoAntesPersonalizacao.current = 'Price'
     setPersonalizacaoPendente(false)
+    setEntradasAlteradas(false)
     setDados(criarDadosZerados())
     setAjustes([])
     setLimitesParcelas([])
+    setLimiteUltimoVencimento(null)
     setResultadoSimulacao(null)
     setResultadoDescartado(false)
     setCalculando(false)
@@ -782,6 +825,11 @@ export default function Simulador() {
         periodosCarencia: contarPeriodosCarencia(resultado.idCobraPrincipal.map((cobraPrincipal) => cobraPrincipal === 'S')),
       }))
       setResultadoSimulacao(resultado)
+      setEntradasAlteradas(false)
+      setLimiteUltimoVencimento((atual) => atual ?? adicionarMeses(
+        dataBackendParaISO(resultado.dtVencimento[resultado.qtdeParcelas - 1]),
+        2,
+      ))
       setLimitesParcelas(resultado.vlJuros.map((juros, indice) => ({
         juros: numeroBackend(juros),
         saldoRemanescente: numeroBackend(resultado.vlSdoRemanescente[indice]),
@@ -794,6 +842,16 @@ export default function Simulador() {
       if (idCalculo === calculoAtual.current) setCalculando(false)
     }
   }
+
+  const calcularEmEfeito = useEffectEvent(() => {
+    void calcular()
+  })
+
+  useEffect(() => {
+    if (solicitacaoRecalculo === ultimaSolicitacaoRecalculo.current) return
+    ultimaSolicitacaoRecalculo.current = solicitacaoRecalculo
+    calcularEmEfeito()
+  }, [solicitacaoRecalculo])
 
   function calcularAposEdicao() {
     if (temValorInvalido) return
@@ -1073,6 +1131,7 @@ export default function Simulador() {
           primeiroVencimento={dataExibida}
           diasPrimeiroVencimento={diasPrimeiroVencimento}
           avisoVencimento={avisoVencimentoUnico}
+          onEdicaoTemporaria={invalidarPorEdicaoTemporaria}
           onChange={atualizarDado}
         />
         <Juros dados={dados} onChange={atualizarDado} totalJuros={totalJuros} disabled={personalizacaoPendente} />
@@ -1088,7 +1147,7 @@ export default function Simulador() {
         <button className="button button-secondary" type="button" onClick={exportarParaExcel} disabled={!podeExportar}>
           Exportar para Excel
         </button>
-        <button className="button button-primary" type="button" onClick={calcular} disabled={calculando || temValorInvalido}>
+        <button className="button button-primary" type="button" onClick={calcular} disabled={calculando || (temValorInvalido && !entradasAlteradas)}>
           {calculando ? 'Calculando...' : 'Calcular'}
         </button>
       </div>
@@ -1104,6 +1163,7 @@ export default function Simulador() {
         <Personalizacao
           parcelas={parcelas}
           limites={limitesParcelas}
+          limiteUltimoVencimento={limiteUltimoVencimento}
           errosValores={errosValores}
           onChange={atualizarParcela}
           onValorEditadoBlur={calcularAposEdicao}
@@ -1111,6 +1171,7 @@ export default function Simulador() {
           onInsertAfter={inserirParcelaApos}
           onDelete={excluirParcela}
           onInicializar={inicializarPersonalizacao}
+          disabled={entradasAlteradas}
           podeInicializar={!calculando && dados.quantidadeParcelas > 0 && !!dados.dataSimulacao && !!dadosParaCalculo.primeiraDataVencimento}
           canAdd={parcelas.length < MAX_PARCELAS && dados.quantidadeParcelas < MAX_PARCELAS && dados.periodicidade !== 'D'}
           vencimentoUnico={dados.periodicidade === 'D'}

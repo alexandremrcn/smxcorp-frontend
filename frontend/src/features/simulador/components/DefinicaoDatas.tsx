@@ -8,10 +8,11 @@ interface DefinicaoDatasProps {
   primeiroVencimento: string
   diasPrimeiroVencimento: number
   avisoVencimento: string
+  onEdicaoTemporaria: () => void
   onChange: <K extends keyof DadosSimulacao>(campo: K, valor: DadosSimulacao[K]) => void
 }
 
-export default function DefinicaoDatas({ dados, disabled = false, primeiroVencimento, diasPrimeiroVencimento, avisoVencimento, onChange }: DefinicaoDatasProps) {
+export default function DefinicaoDatas({ dados, disabled = false, primeiroVencimento, diasPrimeiroVencimento, avisoVencimento, onEdicaoTemporaria, onChange }: DefinicaoDatasProps) {
   const [diaEmEdicao, setDiaEmEdicao] = useState<string | null>(null)
   const [diasEmEdicao, setDiasEmEdicao] = useState<string | null>(null)
   const [dataEmEdicao, setDataEmEdicao] = useState<string | null>(null)
@@ -76,6 +77,7 @@ export default function DefinicaoDatas({ dados, disabled = false, primeiroVencim
                   onChange={(event) => {
                     if (event.target.value === '') {
                       setDiasEmEdicao('')
+                      onEdicaoTemporaria()
                       return
                     }
                     const dias = Number(event.target.value)
@@ -98,6 +100,7 @@ export default function DefinicaoDatas({ dados, disabled = false, primeiroVencim
                     const data = event.target.value
                     if (!data) {
                       setDataEmEdicao('')
+                      onEdicaoTemporaria()
                       return
                     }
                     const minimo = adicionarDias(dados.dataSimulacao, 1)
@@ -137,6 +140,7 @@ export default function DefinicaoDatas({ dados, disabled = false, primeiroVencim
                 const valor = event.target.value
                 if (valor === '') {
                   setDiaEmEdicao('')
+                  onEdicaoTemporaria()
                   return
                 }
                 const dia = Math.max(1, Math.min(31, Math.floor(Number(valor))))

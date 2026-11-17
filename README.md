@@ -26,11 +26,13 @@ A coluna Principal na personalização é apenas informativa e não permite alte
 
 Ao selecionar o sistema Especial, as parcelas começam com valor informado zero, tipo `A` e cobrança de principal e juros habilitada. Na personalização, apenas valores editados de parcelas com cobrança de principal são enviados ao cálculo; os demais são enviados como zero.
 
-Para editar o valor de uma parcela, calcule primeiro a simulação. O valor informado deve ser maior ou igual aos juros e menor que o saldo remanescente após essa parcela, conforme o último cálculo. Ao sair do campo editado, o cálculo é acionado automaticamente se os valores forem válidos. O valor da última parcela é calculado automaticamente e não pode ser editado; parcelas inseridas precisam ser calculadas antes de terem seus valores editados. Valores inválidos impedem um novo cálculo.
+Para editar o valor de uma parcela, calcule primeiro a simulação. O valor informado deve ser maior ou igual aos juros e menor ou igual ao saldo remanescente após essa parcela, conforme o último cálculo. Ao sair do campo editado, o cálculo é acionado automaticamente se os valores forem válidos. O valor da última parcela é calculado automaticamente e não pode ser editado; parcelas inseridas precisam ser calculadas antes de terem seus valores editados. Valores inválidos impedem um novo cálculo.
 
-O botão Inicializar na personalização restaura o cronograma anterior às alterações, incluindo quantidade de parcelas e primeiro vencimento. O resultado é descartado e é necessário calcular novamente.
+Na personalização, o vencimento da última parcela pode ser alterado até dois meses após o último vencimento do cálculo inicial, inclusive. A referência permanece a mesma nos recálculos e é atualizada ao iniciar uma nova configuração. Se o mês limite tiver menos dias, considera-se seu último dia.
 
-Impressão/PDF e exportação para Excel ficam disponíveis somente após um cálculo concluído com sucesso. Depois de alterar os dados ou personalizar parcelas, é necessário calcular novamente.
+O botão Inicializar na personalização restaura as condições anteriores às alterações, incluindo quantidade de parcelas, primeiro vencimento e carência, e calcula novamente.
+
+Ao alterar os dados da simulação, os valores personalizados das parcelas são descartados, o gráfico é limpo e somente os botões Calcular e Limpar ficam habilitados até um cálculo bem-sucedido. Impressão/PDF e exportação para Excel também exigem um novo cálculo após personalizar parcelas.
 
 Para gerar o PDF sem o gráfico, desmarque **Incluir gráfico no PDF** antes de imprimir. A opção não altera o gráfico exibido na tela nem a exportação para Excel.
 

@@ -5,6 +5,10 @@ interface GraficoProps {
   parcelas: Parcela[]
 }
 
+function formatarData(data: string) {
+  return new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR')
+}
+
 export default function Grafico({ parcelas }: GraficoProps) {
   const altura = 240
   const margem = { superior: 30, direita: 10, inferior: 50, esquerda: 50 }
@@ -51,7 +55,7 @@ export default function Grafico({ parcelas }: GraficoProps) {
             const alturaJuros = (parcela.valorJuros / maximo) * alturaUtil
             const yPrincipal = margem.superior + alturaUtil - alturaPrincipal
             const yJuros = yPrincipal - alturaJuros
-            const data = new Date(`${parcela.dataVencimento}T12:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '')
+            const data = formatarData(parcela.dataVencimento)
 
             return (
               <g key={parcela.numero}>
@@ -96,7 +100,7 @@ export default function Grafico({ parcelas }: GraficoProps) {
                 const alturaJuros = (parcela.valorJuros / maximo) * alturaUtilImpressao
                 const yPrincipal = margemImpressao.superior + alturaUtilImpressao - alturaPrincipal
                 const yJuros = yPrincipal - alturaJuros
-                const data = new Date(`${parcela.dataVencimento}T12:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '')
+                const data = formatarData(parcela.dataVencimento)
 
                 return (
                   <g key={parcela.numero}>
