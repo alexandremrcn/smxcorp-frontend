@@ -34,6 +34,8 @@ function existeDataEntre(dataInicial: string, dataFinal?: string) {
 
 interface PersonalizacaoProps {
   parcelas: Parcela[]
+  datasEditadas: boolean[]
+  valoresEditados: boolean[]
   limites: (LimitesParcela | null)[]
   limiteUltimoVencimento: string | null
   errosValores: (string | null)[]
@@ -51,6 +53,8 @@ interface PersonalizacaoProps {
 
 export default function Personalizacao({
   parcelas,
+  datasEditadas,
+  valoresEditados,
   limites,
   limiteUltimoVencimento,
   errosValores,
@@ -90,7 +94,10 @@ export default function Personalizacao({
           </thead>
           <tbody>
             {parcelas.map((parcela, indice) => (
-              <tr key={`${parcela.numero}-${parcela.dataVencimento}`}>
+              <tr
+                key={`${parcela.numero}-${parcela.dataVencimento}`}
+                className={valoresEditados[indice] || datasEditadas[indice] ? 'installment-row--edited' : undefined}
+              >
                 <td className="installment-actions-column">
                   <div className="installment-actions">
                     {canAdd && (
@@ -130,6 +137,7 @@ export default function Personalizacao({
                     aria-label={`Vencimento da parcela ${parcela.numero}`}
                     type="date"
                     value={parcela.dataVencimento}
+                    className={datasEditadas[indice] ? 'installment-date--edited' : undefined}
                     disabled={disabled}
                     readOnly={vencimentoUnico}
                     title={vencimentoUnico
@@ -161,6 +169,7 @@ export default function Personalizacao({
                     type="text"
                     inputMode="numeric"
                     value={formatarValorParcela(parcela.valorParcela)}
+                    className={valoresEditados[indice] ? 'installment-value--edited' : undefined}
                     disabled={disabled || indice === parcelas.length - 1 || !parcela.cobrarPrincipal || vencimentoUnico || !limites[indice]}
                     title={vencimentoUnico
                       ? 'O valor da parcela é calculado pelo sistema Price.'

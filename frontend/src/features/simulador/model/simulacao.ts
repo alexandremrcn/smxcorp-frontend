@@ -39,6 +39,7 @@ export interface DadosSimulacao {
 
 export interface AjusteParcela {
   dataVencimento?: string
+  dataEditada?: boolean
   valorParcela?: number
   cobrarPrincipal?: boolean
   valorEditado?: boolean

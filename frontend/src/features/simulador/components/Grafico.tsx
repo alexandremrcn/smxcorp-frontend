@@ -3,13 +3,15 @@ import { formatarMoeda } from '../model/simulacao'
 
 interface GraficoProps {
   parcelas: Parcela[]
+  datasEditadas: boolean[]
+  valoresEditados: boolean[]
 }
 
 function formatarData(data: string) {
   return new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR')
 }
 
-export default function Grafico({ parcelas }: GraficoProps) {
+export default function Grafico({ parcelas, datasEditadas, valoresEditados }: GraficoProps) {
   const altura = 240
   const margem = { superior: 30, direita: 10, inferior: 50, esquerda: 50 }
   const larguraMinimaParcela = 76
@@ -50,6 +52,7 @@ export default function Grafico({ parcelas }: GraficoProps) {
             )
           })}
           {parcelas.map((parcela, indice) => {
+            const colunaEditada = valoresEditados[indice] || datasEditadas[indice]
             const x = margem.esquerda + espaco * indice + (espaco - larguraBarra) / 2
             const alturaPrincipal = (parcela.valorPrincipal / maximo) * alturaUtil
             const alturaJuros = (parcela.valorJuros / maximo) * alturaUtil
@@ -59,13 +62,22 @@ export default function Grafico({ parcelas }: GraficoProps) {
 
             return (
               <g key={parcela.numero}>
-                <title>{`Parcela ${parcela.numero}: total ${formatarMoeda(parcela.valorParcela)}, principal ${formatarMoeda(parcela.valorPrincipal)}, juros ${formatarMoeda(parcela.valorJuros)}`}</title>
+                <title>{`Parcela ${parcela.numero}: total ${formatarMoeda(parcela.valorParcela)}, principal ${formatarMoeda(parcela.valorPrincipal)}, juros ${formatarMoeda(parcela.valorJuros)}${colunaEditada ? ', valor ou data editados' : ''}`}</title>
                 <rect x={x} y={yPrincipal} width={larguraBarra} height={alturaPrincipal} fill="var(--principal)" />
                 <rect x={x} y={yJuros} width={larguraBarra} height={alturaJuros} fill="var(--interest)" />
-                <text className="chart-value-label" x={x + larguraBarra / 2} y={Math.max(10, yJuros - 5)} textAnchor="middle">
+                {colunaEditada && (
+                  <rect
+                    className="chart-edited-column"
+                    x={x - 1}
+                    y={yJuros - 1}
+                    width={larguraBarra + 2}
+                    height={alturaPrincipal + alturaJuros + 2}
+                  />
+                )}
+                <text className={`chart-value-label${valoresEditados[indice] ? ' chart-value-label--edited' : ''}`} x={x + larguraBarra / 2} y={Math.max(10, yJuros - 5)} textAnchor="middle">
                   {parcela.valorParcela.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </text>
-                <text className="chart-date-label" x={x + larguraBarra / 2} y={altura - 26} textAnchor="middle">{data}</text>
+                <text className={`chart-date-label${datasEditadas[indice] ? ' chart-date-label--edited' : ''}`} x={x + larguraBarra / 2} y={altura - 26} textAnchor="middle">{data}</text>
                 <text className="chart-date-label" x={x + larguraBarra / 2} y={altura - 10} textAnchor="middle">{parcela.numero}</text>
               </g>
             )
@@ -75,6 +87,7 @@ export default function Grafico({ parcelas }: GraficoProps) {
       <div className="chart-legend">
         <span className="legend-item"><span className="legend-swatch" />Principal</span>
         <span className="legend-item"><span className="legend-swatch legend-swatch--interest" />Juros</span>
+        <span className="legend-item"><span className="legend-swatch legend-swatch--edited" />Editada</span>
       </div>
       <div className="chart-print" aria-label="Gráfico para impressão, organizado em faixas de 12 parcelas">
         {faixasImpressao.map((faixa, indiceFaixa) => (
@@ -95,6 +108,9 @@ export default function Grafico({ parcelas }: GraficoProps) {
                 )
               })}
               {faixa.map((parcela, indiceParcela) => {
+                const dataEditada = datasEditadas[indiceFaixa * parcelasPorFaixa + indiceParcela]
+                const valorEditado = valoresEditados[indiceFaixa * parcelasPorFaixa + indiceParcela]
+                const colunaEditada = dataEditada || valorEditado
                 const x = margemImpressao.esquerda + espacoImpressao * indiceParcela + (espacoImpressao - larguraBarraImpressao) / 2
                 const alturaPrincipal = (parcela.valorPrincipal / maximo) * alturaUtilImpressao
                 const alturaJuros = (parcela.valorJuros / maximo) * alturaUtilImpressao
@@ -104,13 +120,22 @@ export default function Grafico({ parcelas }: GraficoProps) {
 
                 return (
                   <g key={parcela.numero}>
-                    <title>{`Parcela ${parcela.numero}: total ${formatarMoeda(parcela.valorParcela)}, principal ${formatarMoeda(parcela.valorPrincipal)}, juros ${formatarMoeda(parcela.valorJuros)}`}</title>
+                    <title>{`Parcela ${parcela.numero}: total ${formatarMoeda(parcela.valorParcela)}, principal ${formatarMoeda(parcela.valorPrincipal)}, juros ${formatarMoeda(parcela.valorJuros)}${colunaEditada ? ', valor ou data editados' : ''}`}</title>
                     <rect x={x} y={yPrincipal} width={larguraBarraImpressao} height={alturaPrincipal} fill="var(--principal)" />
                     <rect x={x} y={yJuros} width={larguraBarraImpressao} height={alturaJuros} fill="var(--interest)" />
-                    <text className="chart-value-label chart-value-label--print" x={x + larguraBarraImpressao / 2} y={Math.max(10, yJuros - 5)} textAnchor="middle">
+                    {colunaEditada && (
+                      <rect
+                        className="chart-edited-column"
+                        x={x - 1}
+                        y={yJuros - 1}
+                        width={larguraBarraImpressao + 2}
+                        height={alturaPrincipal + alturaJuros + 2}
+                      />
+                    )}
+                    <text className={`chart-value-label chart-value-label--print${valorEditado ? ' chart-value-label--edited' : ''}`} x={x + larguraBarraImpressao / 2} y={Math.max(10, yJuros - 5)} textAnchor="middle">
                       {parcela.valorParcela.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </text>
-                    <text className="chart-date-label" x={x + larguraBarraImpressao / 2} y={alturaImpressao - 25} textAnchor="middle">{data}</text>
+                    <text className={`chart-date-label${dataEditada ? ' chart-date-label--edited' : ''}`} x={x + larguraBarraImpressao / 2} y={alturaImpressao - 25} textAnchor="middle">{data}</text>
                     <text className="chart-date-label" x={x + larguraBarraImpressao / 2} y={alturaImpressao - 9} textAnchor="middle">{parcela.numero}</text>
                   </g>
                 )
@@ -121,6 +146,7 @@ export default function Grafico({ parcelas }: GraficoProps) {
         <div className="chart-legend">
           <span className="legend-item"><span className="legend-swatch" />Principal</span>
           <span className="legend-item"><span className="legend-swatch legend-swatch--interest" />Juros</span>
+          <span className="legend-item"><span className="legend-swatch legend-swatch--edited" />Editada</span>
         </div>
       </div>
     </section>

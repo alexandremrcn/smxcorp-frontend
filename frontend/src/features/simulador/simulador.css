@@ -32,6 +32,7 @@
   --result-text: #29414d;
   --result-row-odd: #f1f6f7;
   --result-row-even: #ffffff;
+  --edited-row-bg: #e9edef;
   --hero-bg: #102e43;
   --hero-ink: #ffffff;
   --hero-muted: #c6d6dc;
@@ -72,6 +73,7 @@
   --result-text: #e0eaed;
   --result-row-odd: #26373e;
   --result-row-even: #1d2c33;
+  --edited-row-bg: #243238;
   --hero-bg: #172a35;
   --hero-ink: #eff4f6;
   --hero-muted: #bdcdd2;
@@ -690,12 +692,20 @@
   text-align: center;
 }
 
+.custom-table tr.installment-row--edited {
+  background: var(--edited-row-bg);
+}
+
 @media screen {
   .custom-table .installment-actions-column {
     position: sticky;
     left: 0;
     z-index: 1;
     background: var(--surface);
+  }
+
+  .custom-table tr.installment-row--edited .installment-actions-column {
+    background: var(--edited-row-bg);
   }
 }
 
@@ -787,6 +797,16 @@
   text-align: right;
 }
 
+.custom-table input.installment-value--edited {
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.custom-table input.installment-date--edited {
+  color: var(--blue);
+  font-weight: 700;
+}
+
 .custom-table input[aria-invalid='true'] {
   border-color: #b42318;
 }
@@ -863,6 +883,13 @@
   stroke-width: 1;
 }
 
+.chart-edited-column {
+  fill: var(--blue);
+  fill-opacity: 0.22;
+  stroke: var(--blue);
+  stroke-width: 1.2;
+}
+
 .chart-axis-label,
 .chart-date-label {
   fill: #536171;
@@ -875,6 +902,16 @@
   font-family: 'Segoe UI', Tahoma, sans-serif;
   font-size: 9px;
   font-weight: 600;
+}
+
+.chart-value-label--edited {
+  fill: var(--blue);
+  font-weight: 700;
+}
+
+.chart-date-label--edited {
+  fill: var(--blue);
+  font-weight: 700;
 }
 
 .chart-value-label--print {
@@ -904,6 +941,11 @@
 
 .legend-swatch--interest {
   background: var(--interest);
+}
+
+.legend-swatch--edited {
+  background: var(--blue);
+  opacity: 0.6;
 }
 
 .result-section {

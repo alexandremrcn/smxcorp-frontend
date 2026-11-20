@@ -254,6 +254,8 @@ export default function Simulador() {
       ? parcelasDaSimulacao(resultadoSimulacao)
       : parcelasEmPrevia
   const parcelasParaAnalise = personalizacaoPendente || entradasAlteradas ? [] : parcelas
+  const datasEditadas = ajustes.map((ajuste) => Boolean(ajuste?.dataEditada))
+  const valoresEditados = ajustes.map((ajuste) => Boolean(ajuste?.valorEditado))
   const errosValores = parcelas.map((parcela, indice) => {
     const ajuste = ajustes[indice]
     if (resultadoSimulacao || !parcela.cobrarPrincipal || !ajuste?.valorEditado || ajuste.valorParcela === undefined) return null
@@ -500,6 +502,8 @@ export default function Simulador() {
     setPersonalizacaoPendente(true)
     const valorFoiAlterado = ajuste.valorParcela !== undefined
       && ajuste.valorParcela !== parcelas[indice]?.valorParcela
+    const dataFoiAlterada = ajuste.dataVencimento !== undefined
+      && ajuste.dataVencimento !== parcelas[indice]?.dataVencimento
     calculoAtual.current += 1
     setResultadoSimulacao(null)
     setCalculando(false)
@@ -508,6 +512,7 @@ export default function Simulador() {
     novosAjustes[indice] = {
       ...novosAjustes[indice],
       ...ajuste,
+      dataEditada: novosAjustes[indice]?.dataEditada || dataFoiAlterada,
       valorEditado: novosAjustes[indice]?.valorEditado || valorFoiAlterado,
     }
     setAjustes(novosAjustes)
@@ -1162,6 +1167,8 @@ export default function Simulador() {
       <section className="analysis-panel" aria-label="Personalização e gráfico das parcelas">
         <Personalizacao
           parcelas={parcelas}
+          datasEditadas={datasEditadas}
+          valoresEditados={valoresEditados}
           limites={limitesParcelas}
           limiteUltimoVencimento={limiteUltimoVencimento}
           errosValores={errosValores}
@@ -1176,7 +1183,7 @@ export default function Simulador() {
           canAdd={parcelas.length < MAX_PARCELAS && dados.quantidadeParcelas < MAX_PARCELAS && dados.periodicidade !== 'D'}
           vencimentoUnico={dados.periodicidade === 'D'}
         />
-        <Grafico parcelas={parcelasParaAnalise} />
+        <Grafico parcelas={parcelasParaAnalise} datasEditadas={datasEditadas} valoresEditados={valoresEditados} />
       </section>
 
       <Resultado parcelas={parcelasParaAnalise} simulacao={resultadoSimulacao} />
